@@ -94,7 +94,22 @@ tr:last-child td{border-bottom:none}
 .filter-grid{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;padding:4px 6px}
 .filter-field{display:flex;flex-direction:column;gap:4px;min-width:150px}
 .filter-field label{font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.03em}
-.filter-field select{padding:7px 9px;border:1px solid var(--border-strong);border-radius:6px;font-size:12px;font-family:inherit;background:#fff;color:var(--text)}
+.filter-field input,.filter-field select{padding:7px 9px;border:1px solid var(--border-strong);border-radius:6px;font-size:12px;font-family:inherit;background:#fff;color:var(--text)}
+.filter-field input{min-width:190px}
+.ncp-link{background:transparent;border:none;color:var(--accent);font-weight:700;cursor:pointer;padding:0;text-align:left;font:inherit}
+.ncp-info-popover{position:fixed;z-index:220;max-width:320px;background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px 12px;box-shadow:var(--shadow-lg);display:none;pointer-events:none}
+.ncp-info-popover.show{display:block}
+.ncp-info-popover .title{font-weight:700;font-size:12px;margin-bottom:6px;color:var(--text)}
+.ncp-info-popover .line{display:flex;justify-content:space-between;gap:8px;font-size:11px;color:var(--text-muted);margin:2px 0}
+.ncp-info-popover .line strong{color:var(--text)}
+.image-hover-wrap{position:relative;display:inline-block}
+.image-hover-preview{position:absolute;left:50%;top:calc(100% + 10px);transform:translateX(-50%) translateY(6px);opacity:0;pointer-events:none;transition:all .18s ease;z-index:30;background:#fff;border:1px solid var(--border);border-radius:8px;padding:4px;box-shadow:var(--shadow-md);width:180px;height:180px}
+.image-hover-preview img{width:100%;height:100%;object-fit:cover;border-radius:6px;display:block}
+.image-hover-wrap:hover .image-hover-preview,.image-hover-wrap:focus-within .image-hover-preview{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto}
+.data-stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;padding:0 6px 8px}
+.data-stat-card{background:var(--bg-sunken);border:1px solid var(--border);border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:4px}
+.data-stat-card .k{font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);font-weight:700}
+.data-stat-card .v{font-size:20px;font-weight:800;color:var(--text)}
 
 .tc-form{display:flex;flex-direction:column;gap:10px;padding:10px 14px}
 .tc-form label{font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.03em;display:block;margin-bottom:4px}
@@ -196,7 +211,20 @@ tr:last-child td{border-bottom:none}
     </div>
 
     <div class="panel">
-      <div class="panel-head">📋 Kết quả kiểm tra gần đây <span class="count" id="done-count">0</span></div>
+      <div class="panel-head">� Data phân tích thống kê <span class="count" id="stat-count">0</span></div>
+      <div class="panel-body">
+        <div class="data-stat-grid" id="data-stat-grid"></div>
+        <div class="table-wrap" style="margin-top:8px">
+          <table>
+            <thead><tr><th>Model</th><th>OK</th><th>NG</th><th>Cảnh báo</th><th>Tổng</th><th>Tỷ lệ NG</th></tr></thead>
+            <tbody id="trend-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">�📋 Kết quả kiểm tra gần đây <span class="count" id="done-count">0</span></div>
       <div class="panel-body table-wrap">
         <table>
           <thead><tr><th>Thời điểm</th><th>Máy</th><th>Mã SP</th><th>Loại</th><th>Người kiểm</th><th title="Số phút trễ so với hạn kiểm. Định kỳ: quá chu kỳ 120 phút; Sau sự cố / Đổi khuôn: từ khi phát sinh. Ân hạn 30 phút.">Trễ (phút)</th><th>Thời gian kiểm</th><th>Kết quả</th><th>Liên kết</th></tr></thead>
@@ -212,6 +240,24 @@ tr:last-child td{border-bottom:none}
     <div class="panel">
       <div class="panel-body">
         <div class="filter-grid">
+          <div class="filter-field">
+            <label>Tiêu chí</label>
+            <select id="fl-search-type" onchange="searchHistory()">
+              <option value="all">Tất cả</option>
+              <option value="id_ncp">Số phiếu</option>
+              <option value="model">Tên model</option>
+              <option value="ma_sp">Mã SP</option>
+              <option value="ngay">Ngày kiểm</option>
+            </select>
+          </div>
+          <div class="filter-field">
+            <label>Giá trị tìm kiếm</label>
+            <input id="fl-search-text" type="text" placeholder="Nhập số phiếu / tên model / mã SP" oninput="searchHistory()">
+          </div>
+          <div class="filter-field">
+            <label>Tháng</label>
+            <select id="fl-thang" onchange="searchHistory()"><option value="">Tất cả</option></select>
+          </div>
           <div class="filter-field">
             <label>Ngày kiểm</label>
             <select id="fl-ngay" onchange="searchHistory()"><option value="">Tất cả</option></select>
@@ -741,7 +787,12 @@ function doneRowHtml(d){
     <td class="mono">${fmtDurationSec(d.thoi_gian_kiem_giay)}</td>
     <td><span class="pill ${d.ket_qua === 'OK' ? 'ok' : (d.ket_qua === 'NG' ? 'ng' : 'warn')}">${d.ket_qua === 'CANH_BAO' ? 'CẢNH BÁO' : d.ket_qua}</span></td>
     <td class="link-list">
-      ${(d.anh_bang_chung_urls || []).map((u, i) => '<a class="link-btn" href="' + u + '" target="_blank">Ảnh' + ((d.anh_bang_chung_urls.length > 1) ? ' ' + (i + 1) : '') + '</a>').join('')}
+      ${(d.anh_bang_chung_urls || []).map((u, i) => `
+        <span class="image-hover-wrap">
+          <a class="link-btn" href="${u}" target="_blank">Ảnh${((d.anh_bang_chung_urls.length > 1) ? ' ' + (i + 1) : '')}</a>
+          <span class="image-hover-preview"><img src="${u}" alt="Ảnh lỗi ${i+1}"></span>
+        </span>
+      `).join('')}
       ${scBadge}
       ${d.id_van_de_lien_quan ? '<span class="pill neutral" title="Đã tạo bản ghi vấn đề khuôn ' + escapeHtml(d.id_van_de_lien_quan) + '">Đã báo khuôn</span>' : ''}
       ${ipqcNote}
@@ -800,7 +851,11 @@ async function loadQcFilters(){
   state.machines = (mMachines.data || []).map(r => r.ma_may).filter(Boolean);
   state.products = (mProd.data || []).map(r => r.ma_sp).filter(Boolean);
   state.productMap = {};
-  (mProd.data || []).forEach(p => { state.productMap[p.ma_sp] = p.ten_sp || ''; });
+  state.customerMap = {};
+  (mProd.data || []).forEach(p => {
+    state.productMap[p.ma_sp] = p.ten_sp || '';
+    state.customerMap[p.ma_sp] = [p.ma_khach_hang, p.ten_khach_hang].filter(Boolean).join(' — ') || '';
+  });
   state.currentUserEmail = (await MesAuth.getCurrentUserIdentity()) || '';
 
   state.moldsByProduct = {};
@@ -854,13 +909,33 @@ function onSoKhuonSelectChange(prefix){
 function populateDynamicFilterOptions(list){
   const dates = Array.from(new Set(list.map(x => x.thoi_diem_kiem_thuc_te ? toVnDateStr(x.thoi_diem_kiem_thuc_te) : null).filter(Boolean))).sort().reverse();
   const dateSel = document.getElementById('fl-ngay');
-  dates.forEach(dt => { const opt = document.createElement('option'); opt.value = dt; opt.textContent = new Date(dt + 'T00:00:00').toLocaleDateString('vi-VN'); dateSel.appendChild(opt); });
+  dateSel.innerHTML = '<option value="">Tất cả</option>' + dates.map(dt => `<option value="${dt}">${new Date(dt + 'T00:00:00').toLocaleDateString('vi-VN')}</option>`).join('');
+  const months = Array.from(new Set(list.map(x => x.thoi_diem_kiem_thuc_te ? new Date(x.thoi_diem_kiem_thuc_te).toISOString().slice(0,7) : null).filter(Boolean))).sort().reverse();
+  const monthSel = document.getElementById('fl-thang');
+  monthSel.innerHTML = '<option value="">Tất cả</option>' + months.map(m => `<option value="${m}">${new Date(m + '-01T00:00:00').toLocaleDateString('vi-VN', { month: 'numeric', year: 'numeric' })}</option>`).join('');
   const inspectors = Array.from(new Set(list.map(x => x.nguoi_kiem).filter(Boolean)));
   fillSelect('fl-nguoi-kiem', inspectors);
 }
 
+function getHistorySearchTextFilter(list){
+  const type = document.getElementById('fl-search-type').value || 'all';
+  const keyword = (document.getElementById('fl-search-text').value || '').trim().toLowerCase();
+  if (!keyword) return list;
+  return list.filter(r => {
+    const hay = {
+      all: [r.id_checkpoint, r.ma_may, r.ma_sp, (r.gioi_han || ''), (r.ghi_chu || ''), (r.nguoi_kiem || '')].join(' ').toLowerCase(),
+      id_ncp: String(r.id_checkpoint || '').toLowerCase(),
+      model: String(r.ma_sp || '').toLowerCase(),
+      ma_sp: String(r.ma_sp || '').toLowerCase(),
+      ngay: String(r.thoi_diem_kiem_thuc_te || '').toLowerCase(),
+    };
+    return (hay[type] || '').includes(keyword);
+  });
+}
+
 async function searchHistory(){
   const ngay = document.getElementById('fl-ngay').value;
+  const thang = document.getElementById('fl-thang').value;
   const maMay = document.getElementById('fl-ma-may').value;
   const maSp = document.getElementById('fl-ma-sp').value;
   const nguoiKiem = document.getElementById('fl-nguoi-kiem').value;
@@ -882,6 +957,8 @@ async function searchHistory(){
   let list = (data || []).map(mapIpqcDoneRow);
   if (!state.dynamicFiltersLoaded) { populateDynamicFilterOptions(list); state.dynamicFiltersLoaded = true; }
   if (ngay) list = list.filter(x => x.thoi_diem_kiem_thuc_te && toVnDateStr(x.thoi_diem_kiem_thuc_te) === ngay);
+  if (thang) list = list.filter(x => x.thoi_diem_kiem_thuc_te && x.thoi_diem_kiem_thuc_te.slice(0,7) === thang);
+  list = getHistorySearchTextFilter(list);
   list.sort((a, b) => new Date(b.thoi_diem_kiem_thuc_te || 0) - new Date(a.thoi_diem_kiem_thuc_te || 0));
   renderHistory(list);
 }
@@ -890,6 +967,7 @@ function renderHistory(list){
   document.getElementById('history-count').textContent = list.length;
   document.getElementById('history-tbody').innerHTML = list.map(doneRowHtml).join('');
   document.getElementById('history-empty').classList.toggle('hidden', list.length > 0);
+  renderTrendStats(list);
 }
 
 // ===================== Xử lý sản phẩm không phù hợp =====================
@@ -914,12 +992,57 @@ async function loadNcpList(){
 function renderNcpList(){
   const open = state.ncpList.filter(c => c.trang_thai !== 'dong');
   const closed = state.ncpList.filter(c => c.trang_thai === 'dong');
+  const customerName = (productId) => state.customerMap[productId] || '—';
 
-  document.getElementById('ncp-open-count').textContent = open.length;
-  document.getElementById('ncp-open-tbody').innerHTML = open.map(c => `
-    <tr>
+  const buildSummary = (c) => {
+    const productName = state.productMap[c.ma_sp] || '—';
+    const customer = customerName(c.ma_sp);
+    const tagNo = c.tag_no || '—';
+    const step = NCP_TRANG_THAI_LABEL[c.trang_thai] || c.trang_thai || '—';
+    return {
+      ten_sp: productName,
+      khach_hang: customer,
+      loi: c.mo_ta_loi || '—',
+      so_luong: c.so_luong_nghi_van || 0,
+      tag_no: tagNo,
+      step
+    };
+  };
+
+  const renderRow = (c, closedMode) => {
+    const summary = buildSummary(c);
+    const showInfo = `
+      <div class="ncp-info-popover" id="ncp-info-${c.id_ncp}">
+        <div class="title">${escapeHtml(c.id_ncp)}</div>
+        <div class="line"><span>Tên sản phẩm</span><strong>${escapeHtml(summary.ten_sp)}</strong></div>
+        <div class="line"><span>Khách hàng</span><strong>${escapeHtml(summary.khach_hang)}</strong></div>
+        <div class="line"><span>Lỗi</span><strong>${escapeHtml(summary.loi)}</strong></div>
+        <div class="line"><span>Số lượng</span><strong>${summary.so_luong}</strong></div>
+        <div class="line"><span>Số Tag No</span><strong>${escapeHtml(summary.tag_no)}</strong></div>
+        <div class="line"><span>Trạng thái</span><strong>${escapeHtml(summary.step)}</strong></div>
+      </div>`;
+    const detailCell = `<button class="ncp-link" type="button" onclick="toggleNcpInfo('${c.id_ncp}')" title="${escapeHtml(summary.ten_sp)} · ${escapeHtml(summary.khach_hang)} · ${escapeHtml(summary.loi)}">${escapeHtml(c.id_ncp)}</button>${showInfo}`;
+    if (closedMode) {
+      return `<tr>
+        <td><span class="ncp-badge ${c.mau_the}">${NCP_BADGE_LABEL[c.mau_the]}</span></td>
+        <td class="mono">${detailCell}</td>
+        <td><b>${escapeHtml(c.ma_may)}</b></td>
+        <td class="mono">${escapeHtml(c.ma_sp)}</td>
+        <td class="ncp-qty">${c.so_luong_nghi_van}</td>
+        <td class="ncp-qty" style="color:var(--run-fg)">${c.so_luong_loc_ok + c.so_luong_sua_ok}</td>
+        <td class="ncp-qty" style="color:${c.so_luong_phe_da_duyet > 0 ? 'var(--alarm-fg)' : 'var(--text-muted)'}">${c.so_luong_phe_da_duyet}</td>
+        <td><span class="ncp-rc-badge ${c.rc_trang_thai_duyet}">${NCP_RC_BADGE_LABEL[c.rc_trang_thai_duyet] || c.rc_trang_thai_duyet}</span></td>
+        <td>${escapeHtml(c.nguoi_dam_nhiem || c.nguoi_mo_case)}</td>
+        <td class="mono">${c.ngay_tao ? new Date(c.ngay_tao).toLocaleString('vi-VN', { hour12: false }) : '—'}</td>
+        <td class="ncp-btn-row">
+          <button class="btn btn-outline" onclick="printNcpTag('${c.id_ncp}')">🖨 In thẻ</button>
+          <a class="btn btn-outline" style="text-decoration:none;display:inline-flex;align-items:center" href="ncp-detail.html?id=${encodeURIComponent(c.id_ncp)}" target="_blank">📝 Đối sách</a>
+        </td>
+      </tr>`;
+    }
+    return `<tr>
       <td><span class="ncp-badge ${c.mau_the}">${NCP_BADGE_LABEL[c.mau_the]}</span></td>
-      <td class="mono">${escapeHtml(c.id_ncp)}</td>
+      <td class="mono">${detailCell}</td>
       <td><b>${escapeHtml(c.ma_may)}</b></td>
       <td class="mono">${escapeHtml(c.ma_sp)}</td>
       <td class="ncp-qty">${c.so_luong_nghi_van}</td>
@@ -935,29 +1058,36 @@ function renderNcpList(){
         <a class="btn btn-outline" style="text-decoration:none;display:inline-flex;align-items:center" href="ncp-detail.html?id=${encodeURIComponent(c.id_ncp)}" target="_blank">📝 Đối sách</a>
         <button class="btn btn-primary" onclick="openNcpUpdateModal('${c.id_ncp}')">Cập nhật</button>
       </td>
-    </tr>`).join('');
+    </tr>`;
+  };
+
+  document.getElementById('ncp-open-count').textContent = open.length;
+  document.getElementById('ncp-open-tbody').innerHTML = open.map(c => renderRow(c, false)).join('');
   document.getElementById('ncp-open-empty').classList.toggle('hidden', open.length > 0);
 
   document.getElementById('ncp-closed-count').textContent = closed.length;
-  document.getElementById('ncp-closed-tbody').innerHTML = closed.map(c => `
-    <tr>
-      <td><span class="ncp-badge ${c.mau_the}">${NCP_BADGE_LABEL[c.mau_the]}</span></td>
-      <td class="mono">${escapeHtml(c.id_ncp)}</td>
-      <td><b>${escapeHtml(c.ma_may)}</b></td>
-      <td class="mono">${escapeHtml(c.ma_sp)}</td>
-      <td class="ncp-qty">${c.so_luong_nghi_van}</td>
-      <td class="ncp-qty" style="color:var(--run-fg)">${c.so_luong_loc_ok + c.so_luong_sua_ok}</td>
-      <td class="ncp-qty" style="color:${c.so_luong_phe_da_duyet > 0 ? 'var(--alarm-fg)' : 'var(--text-muted)'}">${c.so_luong_phe_da_duyet}</td>
-      <td><span class="ncp-rc-badge ${c.rc_trang_thai_duyet}">${NCP_RC_BADGE_LABEL[c.rc_trang_thai_duyet] || c.rc_trang_thai_duyet}</span></td>
-      <td>${escapeHtml(c.nguoi_dam_nhiem || c.nguoi_mo_case)}</td>
-      <td class="mono">${c.ngay_tao ? new Date(c.ngay_tao).toLocaleString('vi-VN', { hour12: false }) : '—'}</td>
-      <td class="ncp-btn-row">
-        <button class="btn btn-outline" onclick="printNcpTag('${c.id_ncp}')">🖨 In thẻ</button>
-        <a class="btn btn-outline" style="text-decoration:none;display:inline-flex;align-items:center" href="ncp-detail.html?id=${encodeURIComponent(c.id_ncp)}" target="_blank">📝 Đối sách</a>
-      </td>
-    </tr>`).join('');
+  document.getElementById('ncp-closed-tbody').innerHTML = closed.map(c => renderRow(c, true)).join('');
   document.getElementById('ncp-closed-empty').classList.toggle('hidden', closed.length > 0);
 }
+
+function toggleNcpInfo(id){
+  const panel = document.getElementById('ncp-info-' + id);
+  if (!panel) return;
+  const isOpen = panel.classList.contains('show');
+  document.querySelectorAll('.ncp-info-popover').forEach(el => el.classList.remove('show'));
+  if (!isOpen) {
+    panel.classList.add('show');
+    const rect = panel.parentElement.getBoundingClientRect();
+    panel.style.left = (Math.min(rect.left + 20, window.innerWidth - 340)) + 'px';
+    panel.style.top = (Math.max(20, rect.top + 24)) + 'px';
+  }
+}
+
+window.addEventListener('click', function(event){
+  if (!event.target.closest('.ncp-link')) {
+    document.querySelectorAll('.ncp-info-popover').forEach(el => el.classList.remove('show'));
+  }
+});
 
 function closeNcpModal(id){ document.getElementById(id).classList.remove('show'); }
 
@@ -1216,12 +1346,49 @@ async function loadTieuChuanList(){
     </div>`).join('');
 }
 
+function renderTrendStats(list){
+  const rows = {};
+  list.forEach(item => {
+    const model = item.ma_sp || 'Khác';
+    if (!rows[model]) rows[model] = { model, ok: 0, ng: 0, warn: 0, total: 0 };
+    rows[model].total += 1;
+    if (item.ket_qua === 'OK') rows[model].ok += 1;
+    else if (item.ket_qua === 'NG') rows[model].ng += 1;
+    else if (item.ket_qua === 'CANH_BAO') rows[model].warn += 1;
+  });
+  const trend = Object.values(rows).sort((a, b) => b.total - a.total).slice(0, 8);
+  document.getElementById('trend-tbody').innerHTML = trend.map(r => `
+    <tr>
+      <td class="mono">${escapeHtml(r.model)}</td>
+      <td>${r.ok}</td>
+      <td>${r.ng}</td>
+      <td>${r.warn}</td>
+      <td>${r.total}</td>
+      <td>${r.total ? Math.round((r.ng / r.total) * 100) + '%' : '0%'}</td>
+    </tr>`).join('') || '<tr><td colspan="6" class="empty-note">Chưa có dữ liệu thống kê.</td></tr>';
+  const total = list.length;
+  const ok = list.filter(x => x.ket_qua === 'OK').length;
+  const ng = list.filter(x => x.ket_qua === 'NG').length;
+  const warn = list.filter(x => x.ket_qua === 'CANH_BAO').length;
+  document.getElementById('stat-count').textContent = total;
+  document.getElementById('data-stat-grid').innerHTML = `
+    <div class="data-stat-card"><div class="k">Tổng</div><div class="v">${total}</div></div>
+    <div class="data-stat-card"><div class="k">OK</div><div class="v" style="color:var(--run-fg)">${ok}</div></div>
+    <div class="data-stat-card"><div class="k">NG</div><div class="v" style="color:var(--alarm-fg)">${ng}</div></div>
+    <div class="data-stat-card"><div class="k">Cảnh báo</div><div class="v" style="color:var(--warn-fg)">${warn}</div></div>
+  `;
+}
+
 function editTieuChuan(maSp){
   const t = tieuChuanList.find(x => x.ma_sp === maSp);
   document.getElementById('tc-ma-sp').value = maSp;
   document.getElementById('tc-muc-list').innerHTML = '';
   (t ? t.muc_kiem : []).forEach(m => addMucRow(m));
-  document.getElementById('tc-pdf-current').textContent = t && t.file_pdf_url ? '📄 Đã có PDF — upload file mới để thay thế' : 'Chưa có PDF';
+  if (t && t.file_pdf_url) {
+    document.getElementById('tc-pdf-current').innerHTML = '<a href="' + t.file_pdf_url + '" target="_blank" style="color:var(--accent);font-weight:600;text-decoration:none">📄 Xem tiêu chuẩn PDF</a>';
+  } else {
+    document.getElementById('tc-pdf-current').textContent = 'Chưa có PDF';
+  }
   state.pdfBase64 = null; state.pdfBlob = null;
   document.getElementById('tc-pdf-btn').disabled = true;
 }

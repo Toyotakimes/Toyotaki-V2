@@ -197,8 +197,16 @@ button{cursor:pointer;font-family:inherit}
   </div>
 
   <div class="field">
-    <label>Ghi chú (tuỳ chọn)</label>
-    <textarea id="ck-ghi-chu" placeholder="Ghi chú thêm nếu cần..."></textarea>
+    <label>Thời gian kiểm</label>
+    <div id="ck-timer" style="padding:.7rem .8rem;border:1px solid var(--border-strong);border-radius:.5rem;background:var(--bg-sunken);font-family:'JetBrains Mono',monospace;font-size:1.05rem;font-weight:700;color:var(--text)">00:00</div>
+  </div>
+  <div class="field">
+    <label>Ghi chú công việc phát sinh</label>
+    <textarea id="ck-ghi-chu" placeholder="Nhập ghi chú thêm nếu có lỗi phát sinh trong quá trình kiểm..."></textarea>
+  </div>
+  <div class="field">
+    <label>NG kích thước / chi tiết lỗi</label>
+    <textarea id="ck-chi-tiet-ng" placeholder="Ví dụ: Kích thước NG ở chiều dài 10mm,....; Ngoại quan NG do ..."></textarea>
   </div>
 
   <div class="result-grid">
@@ -237,6 +245,7 @@ const state = {
   checklistAnswers: [],
   photos: [],   // [{blob, mime, dataUrl}]
   pollTimer: null,
+  timerHandle: null,
 };
 
 function showScreen(id){
@@ -607,7 +616,9 @@ async function openCheck(idCheckpoint){
   state.checkStartedAt = Date.now();
   state.photos = [];
   renderPhotoGrid();
+  startCheckTimer();
   document.getElementById('ck-ghi-chu').value = '';
+  document.getElementById('ck-chi-tiet-ng').value = '';
 
   document.getElementById('ck-may').textContent = cp.ma_may;
   document.getElementById('ck-loai').textContent = LOAI_LABEL[cp.loai_kiem] || cp.loai_kiem;
@@ -768,6 +779,30 @@ function renderPhotoGrid(){
   btn.disabled = n >= IPQC_MAX_PHOTOS;
 }
 
+function startCheckTimer(){
+  if (state.timerHandle) clearInterval(state.timerHandle);
+  const el = document.getElementById('ck-timer');
+  const update = () => {
+    const diffSec = state.checkStartedAt ? Math.max(0, Math.round((Date.now() - state.checkStartedAt) / 1000)) : 0;
+    const mm = Math.floor(diffSec / 60).toString().padStart(2, '0');
+    const ss = (diffSec % 60).toString().padStart(2, '0');
+    el.textContent = mm + ':' + ss;
+  };
+  update();
+  state.timerHandle = setInterval(update, 1000);
+}
+
+function stopCheckTimer(){
+  if (state.timerHandle) clearInterval(state.timerHandle);
+  state.timerHandle = null;
+}
+
+function getChecklistFailuresByGroup(groupName){
+  return (state.checklistAnswers || [])
+    .filter(a => a && a.muc && a.muc.toLowerCase().includes(groupName.toLowerCase()) && a.dat === false)
+    .map(a => a.muc.replace(new RegExp('^' + groupName + '\s*[-–—]\s*', 'i'), ''));
+}
+
 function pad2(n){ return String(n).padStart(2,'0'); }
 
 // Tên file trước đây chỉ có độ phân giải theo PHÚT (không có giây) và không
@@ -811,17 +846,32 @@ async function submitCheck(ketQua){
 
   if (!state.photos.length) return showToast('Vui lòng chụp ít nhất 1 ảnh bằng chứng trước khi lưu', true);
 
+  const sizeFails = getChecklistFailuresByGroup('Kích thước');
+  const appearanceFails = getChecklistFailuresByGroup('Ngoại quan');
   const allPass = state.checklistAnswers.every(a => a.dat === true);
   const anyFail = state.checklistAnswers.some(a => a.dat === false);
-  if (ketQua === 'OK' && !allPass) {
-    return showToast('Chỉ được chọn OK khi TẤT CẢ các mục kiểm đều Đạt', true);
+  const sizeOK = !sizeFails.length;
+  const appearanceOK = !appearanceFails.length;
+
+  if (ketQua === 'OK' && (!allPass || !sizeOK || !appearanceOK)) {
+    return showToast('Kích thước và Ngoại quan phải cùng đạt OK mới được chọn OK', true);
   }
   if ((ketQua === 'NG' || ketQua === 'CANH_BAO') && !anyFail) {
     return showToast('NG / Cảnh báo cần ít nhất 1 mục kiểm Không đạt', true);
   }
-  const ghiChu = document.getElementById('ck-ghi-chu').value.trim();
+
+  const notes = document.getElementById('ck-ghi-chu').value.trim();
+  const detailNg = document.getElementById('ck-chi-tiet-ng').value.trim();
+  const sizeDetailText = sizeFails.length ? 'Kích thước NG: ' + sizeFails.join('; ') : '';
+  const appearanceDetailText = appearanceFails.length ? 'Ngoại quan NG: ' + appearanceFails.join('; ') : '';
+  const detailText = [sizeDetailText, appearanceDetailText, detailNg].filter(Boolean).join(' | ');
+  const ghiChu = [notes, detailText].filter(Boolean).join(' | ');
   if ((ketQua === 'NG' || ketQua === 'CANH_BAO') && !ghiChu) {
     return showToast('NG / Cảnh báo bắt buộc phải nhập ghi chú', true);
+  }
+
+  if (ketQua === 'NG' && !detailText) {
+    return showToast('Khi NG cần mô tả rõ mục Kích thước/Nguyên nhân không đạt trong phần chi tiết.', true);
   }
 
   showOverlay('Đang tải ảnh bằng chứng...');
@@ -849,6 +899,7 @@ async function submitCheck(ketQua){
     showToast(msg + (data && data.note ? ' (' + data.note + ')' : ''));
     state.queue = state.queue.filter(x => x.id_checkpoint !== state.current.id_checkpoint);
     state.current = null;
+    stopCheckTimer();
     renderQueue();
     showScreen('scr-queue');
   } catch (e) {
