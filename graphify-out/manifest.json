@@ -1,0 +1,287 @@
+{
+  ".claude/settings.local.json": {
+    "mtime": 1786721509.6501544,
+    "ast_hash": "e0e4ff9e7bab08b473b0ac154474cc03",
+    "semantic_hash": "e0e4ff9e7bab08b473b0ac154474cc03"
+  },
+  "shared/supabase-client.js": {
+    "mtime": 1786701982.6536744,
+    "ast_hash": "a177337b658c36c4388ccd2e39cc5120",
+    "semantic_hash": "a177337b658c36c4388ccd2e39cc5120"
+  },
+  "supabase/functions/admin-create-user/index.ts": {
+    "mtime": 1786718280.5961976,
+    "ast_hash": "b6054fbd1c40b6576545741e3ab9a7a0",
+    "semantic_hash": "b6054fbd1c40b6576545741e3ab9a7a0"
+  },
+  "supabase/import-chatluong.mjs": {
+    "mtime": 1786701982.8404925,
+    "ast_hash": "43f8da49403765412d31507eef4ed208",
+    "semantic_hash": "43f8da49403765412d31507eef4ed208"
+  },
+  "supabase/import-chuyencongdoan.mjs": {
+    "mtime": 1786701982.8434007,
+    "ast_hash": "cd12608be9789505c4a3ca2eb581fcac",
+    "semantic_hash": "cd12608be9789505c4a3ca2eb581fcac"
+  },
+  "supabase/import-duc.mjs": {
+    "mtime": 1786701982.847952,
+    "ast_hash": "57105fd04a6b3e7a3c3f1340de186b32",
+    "semantic_hash": "57105fd04a6b3e7a3c3f1340de186b32"
+  },
+  "supabase/import-nvl.mjs": {
+    "mtime": 1786701982.8500087,
+    "ast_hash": "2c5414ce75e605bc9207d9f1cd99bd15",
+    "semantic_hash": "2c5414ce75e605bc9207d9f1cd99bd15"
+  },
+  "supabase/import-sanluong.mjs": {
+    "mtime": 1786701982.8533154,
+    "ast_hash": "ec49f7731b6386519bc9a2865099c608",
+    "semantic_hash": "ec49f7731b6386519bc9a2865099c608"
+  },
+  "supabase/migration_nvl_step1_write.sql": {
+    "mtime": 1786701982.743234,
+    "ast_hash": "255074ccde9805830d294f3963d49688",
+    "semantic_hash": "255074ccde9805830d294f3963d49688"
+  },
+  "supabase/migration_phase3_chuyencongdoan.sql": {
+    "mtime": 1786701982.7622797,
+    "ast_hash": "6961a05306b2911d46f39dffac46bd15",
+    "semantic_hash": "6961a05306b2911d46f39dffac46bd15"
+  },
+  "supabase/migration_phase4_step10_khsx_tuan.sql": {
+    "mtime": 1786701982.7632153,
+    "ast_hash": "30e9f65492eb3bf6bbcd7778d5be469a",
+    "semantic_hash": "30e9f65492eb3bf6bbcd7778d5be469a"
+  },
+  "supabase/migration_phase4_step11_intem_write.sql": {
+    "mtime": 1786701982.765137,
+    "ast_hash": "b40a907814199762c13487a8c756e171",
+    "semantic_hash": "b40a907814199762c13487a8c756e171"
+  },
+  "supabase/migration_phase4_step12_ipqc_frontend.sql": {
+    "mtime": 1786701982.768178,
+    "ast_hash": "41dc04c4dce446dfcb818655baf17c51",
+    "semantic_hash": "41dc04c4dce446dfcb818655baf17c51"
+  },
+  "supabase/migration_phase4_step2_intem.sql": {
+    "mtime": 1786701982.7716613,
+    "ast_hash": "6bcd6c4c544aac2037f919fa5f6eba2b",
+    "semantic_hash": "6bcd6c4c544aac2037f919fa5f6eba2b"
+  },
+  "supabase/migration_phase4_step3_ca_hien_tai.sql": {
+    "mtime": 1786701982.7726476,
+    "ast_hash": "333a485c21c7100f80cc4fad1f34f0c6",
+    "semantic_hash": "333a485c21c7100f80cc4fad1f34f0c6"
+  },
+  "supabase/migration_phase4_step4_ipqc_checkpoint.sql": {
+    "mtime": 1786701982.7736437,
+    "ast_hash": "451cd6b668994f948778d4897b04078a",
+    "semantic_hash": "451cd6b668994f948778d4897b04078a"
+  },
+  "supabase/migration_phase4_step5_resolve_incident.sql": {
+    "mtime": 1786701982.7770474,
+    "ast_hash": "21c51f0d000868f37fd078670cf13fbb",
+    "semantic_hash": "21c51f0d000868f37fd078670cf13fbb"
+  },
+  "supabase/migration_phase4_step6_ncp.sql": {
+    "mtime": 1786701982.7790415,
+    "ast_hash": "09d5eec904fd5c669d7de792c09d5773",
+    "semantic_hash": "09d5eec904fd5c669d7de792c09d5773"
+  },
+  "supabase/migration_phase4_step7_end_shift.sql": {
+    "mtime": 1786701982.7800286,
+    "ast_hash": "b49860aca50f7626785479cc7e4c3b45",
+    "semantic_hash": "b49860aca50f7626785479cc7e4c3b45"
+  },
+  "supabase/migration_phase4_step8_cahientai_rpc.sql": {
+    "mtime": 1786701982.7810242,
+    "ast_hash": "28731e4e75b9894fbbc6f5d0932b5bbf",
+    "semantic_hash": "28731e4e75b9894fbbc6f5d0932b5bbf"
+  },
+  "supabase/migration_phase4_step9_frontend_gaps.sql": {
+    "mtime": 1786701982.7840343,
+    "ast_hash": "8d89c18e257cb1bd6b56c1b09667ad4b",
+    "semantic_hash": "8d89c18e257cb1bd6b56c1b09667ad4b"
+  },
+  "supabase/migration_phase_D0_foundation.sql": {
+    "mtime": 1786701982.747454,
+    "ast_hash": "a1c0ff261dab2b3bab0e7d211dcab85d",
+    "semantic_hash": "a1c0ff261dab2b3bab0e7d211dcab85d"
+  },
+  "supabase/migration_phase_D1_sanluong_write.sql": {
+    "mtime": 1786701982.7490797,
+    "ast_hash": "ff0565f9fead1ab31be426a2093fd7dc",
+    "semantic_hash": "ff0565f9fead1ab31be426a2093fd7dc"
+  },
+  "supabase/migration_phase_D2_chatluong_write.sql": {
+    "mtime": 1786701982.7532904,
+    "ast_hash": "d162c374f8b532f41f0a013be0b434fc",
+    "semantic_hash": "d162c374f8b532f41f0a013be0b434fc"
+  },
+  "supabase/migration_phase_D3_chuyencongdoan_write.sql": {
+    "mtime": 1786701982.756364,
+    "ast_hash": "81b57be467876b58a929c9ec44dade56",
+    "semantic_hash": "81b57be467876b58a929c9ec44dade56"
+  },
+  "supabase/migration_phase_D3b_chuyencongdoan_tuchoi.sql": {
+    "mtime": 1786701982.7603116,
+    "ast_hash": "2be46d869f73536a0167939896bea272",
+    "semantic_hash": "2be46d869f73536a0167939896bea272"
+  },
+  "supabase/migration_phase_S1_accounts_roles.sql": {
+    "mtime": 1786704667.9116435,
+    "ast_hash": "bfa71bc3be1218a68cc89b52bcfeb3e8",
+    "semantic_hash": "bfa71bc3be1218a68cc89b52bcfeb3e8"
+  },
+  "supabase/migration_phase_S2_username_login.sql": {
+    "mtime": 1786718266.9958377,
+    "ast_hash": "63e07028d7a7d1e706907d2e029d048a",
+    "semantic_hash": "63e07028d7a7d1e706907d2e029d048a"
+  },
+  "supabase/migration_phase_S3_danh_muc_write.sql": {
+    "mtime": 1786718635.913681,
+    "ast_hash": "b67825677832856c5e6fbea517f6fcba",
+    "semantic_hash": "b67825677832856c5e6fbea517f6fcba"
+  },
+  "supabase/migration_phase_S4_nhansu_bophan.sql": {
+    "mtime": 1786719037.4296346,
+    "ast_hash": "c389dc4513d3c8a6653108dbebe128ee",
+    "semantic_hash": "c389dc4513d3c8a6653108dbebe128ee"
+  },
+  "supabase/migration_phase_S5_sanpham_nguyenlieu.sql": {
+    "mtime": 1786720358.631037,
+    "ast_hash": "93a828b1462b0c2e6c73a118b3513c51",
+    "semantic_hash": "93a828b1462b0c2e6c73a118b3513c51"
+  },
+  "supabase/migration_phase_S6_data_nguyenlieu_sokhuon.sql": {
+    "mtime": 1786721003.2210362,
+    "ast_hash": "55acaa984c04c76dc1a35b99eb591532",
+    "semantic_hash": "55acaa984c04c76dc1a35b99eb591532"
+  },
+  "supabase/migration_phase_S6_so_khuon_column.sql": {
+    "mtime": 1786720997.7336793,
+    "ast_hash": "eeafda7771663b5c9c7300fd260814ae",
+    "semantic_hash": "eeafda7771663b5c9c7300fd260814ae"
+  },
+  "supabase/migration_phase_S7_sokhuon_real.sql": {
+    "mtime": 1786721215.5451305,
+    "ast_hash": "a9c968caea71471740bb30413e2d247e",
+    "semantic_hash": "a9c968caea71471740bb30413e2d247e"
+  },
+  "supabase/schema_chatluong.sql": {
+    "mtime": 1786701982.7876735,
+    "ast_hash": "28b134145bfef668dbff55efe67a8b0b",
+    "semantic_hash": "28b134145bfef668dbff55efe67a8b0b"
+  },
+  "supabase/schema_chuyencongdoan.sql": {
+    "mtime": 1786701982.789362,
+    "ast_hash": "08d0ab32940e8c633aa38dd44ff16e4c",
+    "semantic_hash": "08d0ab32940e8c633aa38dd44ff16e4c"
+  },
+  "supabase/schema_duc.sql": {
+    "mtime": 1786701982.7923875,
+    "ast_hash": "9e9bb470a91eebdf290f9ca25ad143ba",
+    "semantic_hash": "9e9bb470a91eebdf290f9ca25ad143ba"
+  },
+  "supabase/schema_nvl.sql": {
+    "mtime": 1786701982.7943852,
+    "ast_hash": "9ec2dfa09df6fdfc810294632ecabe86",
+    "semantic_hash": "9ec2dfa09df6fdfc810294632ecabe86"
+  },
+  "supabase/schema_sanluong.sql": {
+    "mtime": 1786701982.7959094,
+    "ast_hash": "aac2e6e0d6a27d9b1589f9381de83a64",
+    "semantic_hash": "aac2e6e0d6a27d9b1589f9381de83a64"
+  },
+  "KE_HOACH_MIGRATE_DATABASE.md": {
+    "mtime": 1786702901.025059,
+    "ast_hash": "23cd108a16c2f24421ed2558223635b7",
+    "semantic_hash": "23cd108a16c2f24421ed2558223635b7"
+  },
+  "KE_HOACH_TINH_NANG_MOI.md": {
+    "mtime": 1786719301.0414283,
+    "ast_hash": "6ca91ebf5fa68a2e2b2ecbddc07aa847",
+    "semantic_hash": "6ca91ebf5fa68a2e2b2ecbddc07aa847"
+  },
+  "bao-cao-ca.html": {
+    "mtime": 1786722572.211493,
+    "ast_hash": "3536cdcb090a102abdb855179dbea048",
+    "semantic_hash": "3536cdcb090a102abdb855179dbea048"
+  },
+  "chatluong-supabase.html": {
+    "mtime": 1786701982.2569184,
+    "ast_hash": "697e6880cfadeafc3a99e0c9ca2a0d21",
+    "semantic_hash": "697e6880cfadeafc3a99e0c9ca2a0d21"
+  },
+  "chuyencongdoan.html": {
+    "mtime": 1786701982.3045635,
+    "ast_hash": "0a7538494cb6a8b3ce9e77f0e2c03d82",
+    "semantic_hash": "0a7538494cb6a8b3ce9e77f0e2c03d82"
+  },
+  "duc-dashboard.html": {
+    "mtime": 1786722598.5168893,
+    "ast_hash": "884f073b330195c4c46d48fb8b9864dd",
+    "semantic_hash": "884f073b330195c4c46d48fb8b9864dd"
+  },
+  "index.html": {
+    "mtime": 1786722581.5649235,
+    "ast_hash": "640089c0f727b2d8030773377e9f6a84",
+    "semantic_hash": "640089c0f727b2d8030773377e9f6a84"
+  },
+  "intem.html": {
+    "mtime": 1786721801.0496426,
+    "ast_hash": "df0dca86b836cca139bc93462cd1e3d9",
+    "semantic_hash": "df0dca86b836cca139bc93462cd1e3d9"
+  },
+  "ipqc.html": {
+    "mtime": 1786719776.91645,
+    "ast_hash": "52dcdff86497d78aa687c69f70606d6f",
+    "semantic_hash": "52dcdff86497d78aa687c69f70606d6f"
+  },
+  "khsx-tuan.html": {
+    "mtime": 1786701982.4617698,
+    "ast_hash": "b3c8fc35bdd0d1138b11b9afd1176877",
+    "semantic_hash": "b3c8fc35bdd0d1138b11b9afd1176877"
+  },
+  "mobile.html": {
+    "mtime": 1786722753.4860165,
+    "ast_hash": "294621e1eb5058213f1a7c2ef11af7b6",
+    "semantic_hash": "294621e1eb5058213f1a7c2ef11af7b6"
+  },
+  "ncp-detail.html": {
+    "mtime": 1786701982.5043118,
+    "ast_hash": "0edafcbf2f227cd76e56bca440b58db2",
+    "semantic_hash": "0edafcbf2f227cd76e56bca440b58db2"
+  },
+  "nvl.html": {
+    "mtime": 1786701983.0133011,
+    "ast_hash": "c079379876e82f822f8268a7993b31e5",
+    "semantic_hash": "c079379876e82f822f8268a7993b31e5"
+  },
+  "qc-manager.html": {
+    "mtime": 1786701982.5541468,
+    "ast_hash": "f19459e1deb6590f81cbfef67c110a81",
+    "semantic_hash": "f19459e1deb6590f81cbfef67c110a81"
+  },
+  "quan-ly-danh-muc.html": {
+    "mtime": 1786721037.2731588,
+    "ast_hash": "a359eebc142c2cd47461a4485b953d35",
+    "semantic_hash": "a359eebc142c2cd47461a4485b953d35"
+  },
+  "quan-ly-tai-khoan.html": {
+    "mtime": 1786718327.0216117,
+    "ast_hash": "7b20e6e947d46f425c1257c9a23e2441",
+    "semantic_hash": "7b20e6e947d46f425c1257c9a23e2441"
+  },
+  "sanluong-supabase.html": {
+    "mtime": 1786701982.1984766,
+    "ast_hash": "3e6c0c0f5900469975fbfc6a794f4070",
+    "semantic_hash": "3e6c0c0f5900469975fbfc6a794f4070"
+  },
+  "shared/login.html": {
+    "mtime": 1786718293.6722424,
+    "ast_hash": "c29aeac03c58453efce91880851b5efb",
+    "semantic_hash": "c29aeac03c58453efce91880851b5efb"
+  }
+}

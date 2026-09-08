@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,interactive-widget=resizes-content">
+<title>OQC — Đóng gói Pallet — TOYOTAKI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet"></noscript>
+<!--
+  oqc.html — màn hình mới, đóng khoảng trống "pallet/thành phẩm" trong chuỗi
+  liên kết truy xuất lệnh SX → ca/máy/khuôn → lot NVL → sọt/pallet → công
+  đoạn → thành phẩm (KE_HOACH_TINH_NANG_MOI.md, Nhóm 3, mục QR/lot/pallet).
+  Trước đây OQC chỉ có ipqc.html (kiểm tra trong-chuyền), chưa có màn hình
+  nào ghi nhận việc đóng gói thành phẩm cuối chuyền thành pallet.
+
+  Luồng: quét QR tem (duc_tem/tag_no, có thể là tem đã tách qua chuyencongdoan)
+  → nhập số lượng ngoại quan OK → thêm vào pallet đang mở (tự tạo nếu chưa có)
+  → lặp lại tới khi đủ → "Đóng gói xong" → in nhãn pallet.
+  Schema: supabase/migration_phase_T1_qr_lot_pallet.sql (oqc_pallet,
+  oqc_pallet_item, oqc_tao_pallet, oqc_them_tem_vao_pallet, oqc_dong_pallet).
+
+  migration_phase_T7_kho_thanh_pham.sql (2026-08-16): TÁCH RIÊNG "đóng gói
+  xong" (trạng thái da_dong_goi, ở đây) khỏi "đã thực sự nhập kho" (trạng
+  thái da_nhap_kho — quét lại ở kho-thanh-pham.html, vì đóng gói xong ở
+  trạm OQC và nhập kho thật là 2 vị trí/thời điểm khác nhau). KHÔNG tự động
+  nhập kho khi đóng pallet ở đây nữa.
+-->
+<style>
+:root{--bg-page:#EEF1F5;--bg-panel:#FFFFFF;--bg-sunken:#F5F7FA;--bg-header:#1E293B;--border:#D9DFE5;--border-strong:#B8C1CC;--text:#0F172A;--text-muted:#64748B;--text-dim:#94A3B8;--accent:#0F5FA5;--accent-hover:#0A4681;--run-fg:#047857;--run-bg:#ECFDF5;--warn-fg:#B45309;--warn-bg:#FFFBEB;--alarm-fg:#B91C1C;--alarm-bg:#FEF2F2;--shadow-sm:0 1px 2px rgba(15,23,42,0.04);--shadow-md:0 4px 12px rgba(15,23,42,0.08);--shadow-lg:0 12px 32px rgba(15,23,42,0.16);}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background:var(--bg-page);color:var(--text);font-size:13px;line-height:1.35;-webkit-font-smoothing:antialiased}
+body{min-height:100vh;display:flex;flex-direction:column;
+  align-items:center;padding:0 12px 40px}
+header{background:var(--bg-header);color:#F1F5F9;border-radius:8px;padding:6px 14px;display:flex;
+  align-items:center;gap:14px;box-shadow:var(--shadow-sm);flex-wrap:wrap;width:100%;max-width:none;
+  margin-top:6px;margin-bottom:14px}
+.brand{display:flex;flex-direction:column;line-height:1.2}
+.brand .co{font-size:9px;letter-spacing:.08em;color:#94A3B8;text-transform:uppercase;font-weight:500}
+.brand .title{font-size:14px;font-weight:700;letter-spacing:-.01em;color:#FFF}
+.header-group{display:flex;align-items:center;gap:6px}
+.header-label{font-size:10px;color:#94A3B8;text-transform:uppercase;letter-spacing:.05em;font-weight:500}
+.header-select,.header-input{background:#334155;color:#F1F5F9;border:1px solid #475569;
+  border-radius:5px;padding:4px 8px;font-family:inherit;font-size:12px;font-weight:500;
+  cursor:pointer;outline:none}
+.header-select:hover{background:#3F5266}
+.header-clock{margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;
+  padding:0 10px;line-height:1.15}
+.header-clock .date{font-size:10px;color:#94A3B8}
+.header-clock .time{font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;
+  color:#FFF;letter-spacing:-.02em}
+.btn-ghost{background:transparent;color:#F1F5F9;border:1px solid #475569}
+.btn-ghost:hover:not(:disabled){background:#334155}
+.auth-info{font-size:11px;color:var(--text-muted)}
+.auth-info a{color:var(--accent);text-decoration:none;font-weight:600}
+.card{background:var(--bg-panel);border-radius:10px;box-shadow:var(--shadow-sm);border:1px solid var(--border);
+  padding:20px 18px;width:100%;max-width:none;margin-bottom:14px}
+.card-ttl{font-size:12px;font-weight:700;color:var(--accent);text-transform:uppercase;
+  letter-spacing:.5px;margin-bottom:14px;padding-bottom:9px;border-bottom:2px solid var(--border)}
+.fg{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
+label{font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px}
+input,select{border:1.5px solid var(--border-strong);border-radius:7px;padding:8px 10px;font-size:13px;
+  color:var(--text);width:100%;font-family:inherit;background:var(--bg-panel)}
+input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(15,95,165,.12)}
+.btn{padding:12px;border:none;border-radius:9px;font-size:13px;font-weight:700;
+  cursor:pointer;width:100%;margin-top:6px;font-family:inherit}
+.btn-p{background:var(--accent);color:#fff}
+.btn-p:hover:not(:disabled){background:var(--accent-hover)}
+.btn-p:disabled{opacity:.5;cursor:not-allowed}
+.btn-s{background:var(--bg-sunken);color:var(--text-muted);border:1px solid var(--border)}
+.btn-danger{background:var(--alarm-bg);color:var(--alarm-fg)}
+.scan-btn{width:100%;padding:14px;border:none;border-radius:10px;background:var(--accent);
+  color:#fff;font-size:13px;font-weight:700;cursor:pointer;display:flex;font-family:inherit;
+  align-items:center;justify-content:center;gap:8px}
+.scan-btn:hover{background:var(--accent-hover)}
+.pallet-hdr{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px}
+.pallet-id{font-size:15px;font-weight:800;color:var(--text)}
+.pallet-total{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--accent);font-weight:700}
+.item-row{display:flex;justify-content:space-between;align-items:center;
+  padding:9px 4px;border-bottom:1px solid var(--border);font-size:13px}
+.item-row:last-child{border-bottom:none}
+.item-row .tag{font-weight:700;color:var(--text)}
+.item-row .meta{color:var(--text-muted);font-size:11px}
+.item-row .sl{font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--accent)}
+.empty-hint{font-size:12px;color:var(--text-dim);text-align:center;padding:14px 4px}
+#msg{margin-top:4px;padding:11px 14px;border-radius:7px;font-size:13px;font-weight:600;
+  display:none;width:100%;max-width:none}
+.err{background:var(--alarm-bg);color:var(--alarm-fg);border:1px solid #FCA5A5;display:block!important}
+.ok{background:var(--run-bg);color:var(--run-fg);border:1px solid #A7F3D0;display:block!important}
+.wait{background:var(--warn-bg);color:var(--warn-fg);border:1px solid #FDE68A;display:block!important}
+.loading-overlay{display:flex;align-items:center;justify-content:center;padding:30px;
+  color:var(--accent);font-size:13px;gap:10px;width:100%;max-width:none}
+.spin{width:20px;height:20px;border:3px solid var(--border);border-top-color:var(--accent);
+  border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.qr-modal{position:fixed;inset:0;background:#000;z-index:9999;display:none;flex-direction:column}
+.qr-modal.show{display:flex}
+.qr-modal-hdr{display:flex;justify-content:space-between;align-items:center;
+  padding:12px 14px;background:rgba(0,0,0,.7);flex-shrink:0}
+.qr-modal-hdr span{color:#fff;font-size:13px;font-weight:700}
+.qr-modal-close{background:var(--alarm-fg);color:#fff;border:none;border-radius:8px;
+  padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+#qrReaderDiv{position:relative;flex:1;overflow:hidden}
+#qrReaderDiv video{position:absolute!important;inset:0!important;
+  width:100%!important;height:100%!important;object-fit:cover!important}
+.pending-box{background:var(--bg-sunken);border:1.5px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <span class="co">Toyotaki</span>
+    <span class="title">OQC — Đóng gói Pallet</span>
+  </div>
+  <div class="header-clock">
+    <span class="date" id="headerDate"></span>
+    <span class="time" id="headerTime"></span>
+  </div>
+</header>
+
+<div id="loading" class="loading-overlay"><div class="spin"></div> Đang tải dữ liệu...</div>
+
+<div id="mainWrap" style="display:none;width:100%;max-width:none">
+
+  <div class="card">
+    <div class="pallet-hdr">
+      <div class="pallet-id" id="palletIdLabel">Chưa có pallet đang mở</div>
+      <div class="pallet-total" id="palletTotalLabel"></div>
+    </div>
+    <div id="palletItems"><div class="empty-hint">Bắt đầu pallet mới rồi quét tem để thêm sản phẩm.</div></div>
+    <button class="btn btn-p" id="btnNewPallet" style="margin-top:12px">🆕 Bắt đầu pallet mới</button>
+    <button class="btn btn-s" id="btnClosePallet" style="display:none">📦 Đóng gói xong</button>
+  </div>
+
+  <div class="card" id="scanCard" style="display:none">
+    <div class="card-ttl">Quét tem sản phẩm</div>
+    <button class="scan-btn" type="button" id="btnScan">📷 Quét QR trên tem</button>
+    <input type="file" id="qrFileInput" accept="image/*" capture="environment" style="display:none">
+    <div class="fg" style="margin-top:10px">
+      <label>Hoặc nhập tay / dùng đầu đọc QR rời (gõ Tag No rồi Enter)</label>
+      <input type="text" autocomplete="off" id="manualTagInput" placeholder="Bấm vào đây rồi quét bằng đầu đọc QR, hoặc gõ Tag No...">
+    </div>
+  </div>
+
+  <div class="card" id="pendingCard" style="display:none">
+    <div class="card-ttl">Xác nhận thêm vào pallet</div>
+    <div class="pending-box" id="pendingInfo"></div>
+    <div class="fg">
+      <label class="req">Số lượng ngoại quan OK</label>
+      <input id="pendingSoLuong" type="number" min="1">
+    </div>
+    <button class="btn btn-p" id="btnAddToPallet">✅ Thêm vào pallet</button>
+    <button class="btn btn-s" id="btnCancelPending">Huỷ</button>
+  </div>
+
+  <div class="card">
+    <div class="card-ttl">Tra cứu pallet đã đóng gói</div>
+    <div class="fg">
+      <label>Mã pallet</label>
+      <div style="display:flex;gap:8px">
+        <input id="lookupPalletId" type="text" placeholder="VD: PLT20260815-001">
+        <button class="btn btn-s" type="button" style="width:auto;flex:none;padding:8px 14px" onclick="lookupPallet()">🔎 Tìm</button>
+      </div>
+    </div>
+    <div id="lookupResult"></div>
+  </div>
+</div>
+
+<div id="msg"></div>
+<canvas id="scanCanvas" style="display:none"></canvas>
+
+<div class="qr-modal" id="qrModal">
+  <div class="qr-modal-hdr">
+    <span>📷 Đưa mã QR trên tem vào giữa khung hình</span>
+    <button type="button" class="qr-modal-close" id="btnCloseQrModal">✖ Đóng</button>
+  </div>
+  <div id="qrReaderDiv"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="shared/supabase-client.js"></script>
+<script src="shared/navbar.js"></script>
+<script>
+var currentPalletId = null;
+var currentNguoi = "";
+var pendingTagNo = null;
+
+function err(m){ showMsg("❌ " + m, "err"); }
+function showMsg(text, cls, autoHideMs){
+  var el = document.getElementById("msg");
+  el.textContent = text; el.className = cls;
+  if (autoHideMs) setTimeout(() => { el.style.display = "none"; }, autoHideMs);
+}
+
+function tickHeaderClock(){
+  const now = new Date();
+  document.getElementById("headerDate").textContent = now.toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });
+  document.getElementById("headerTime").textContent = now.toLocaleTimeString('vi-VN', { hour12: false });
+}
+tickHeaderClock();
+setInterval(tickHeaderClock, 1000);
+
+async function init(){
+  await MesAuth.requireAuth();
+  currentNguoi = (await MesAuth.getCurrentUserIdentity()) || '';
+
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('mainWrap').style.display = 'block';
+}
+init();
+
+// =============================================================================
+// PALLET STATE
+// =============================================================================
+function renderPalletEmpty(){
+  document.getElementById("palletIdLabel").textContent = "Chưa có pallet đang mở";
+  document.getElementById("palletTotalLabel").textContent = "";
+  document.getElementById("palletItems").innerHTML = '<div class="empty-hint">Bắt đầu pallet mới rồi quét tem để thêm sản phẩm.</div>';
+  document.getElementById("btnNewPallet").style.display = "block";
+  document.getElementById("btnClosePallet").style.display = "none";
+  document.getElementById("scanCard").style.display = "none";
+  document.getElementById("pendingCard").style.display = "none";
+}
+
+async function refreshPalletView(){
+  if (!currentPalletId) { renderPalletEmpty(); return; }
+  const { data: pallet } = await sb.from('oqc_pallet').select('*').eq('id_pallet', currentPalletId).maybeSingle();
+  if (!pallet || pallet.trang_thai !== 'dang_dong_goi'){ currentPalletId = null; renderPalletEmpty(); return; }
+  const { data: items } = await sb.from('oqc_pallet_item').select('tag_no,so_luong,thoi_diem_quet')
+    .eq('id_pallet', currentPalletId).order('thoi_diem_quet');
+
+  document.getElementById("palletIdLabel").textContent = "📦 " + currentPalletId;
+  document.getElementById("palletTotalLabel").textContent = "Tổng: " + (pallet.tong_so_luong || 0);
+  document.getElementById("btnNewPallet").style.display = "none";
+  document.getElementById("btnClosePallet").style.display = (items && items.length) ? "block" : "none";
+  document.getElementById("scanCard").style.display = "block";
+
+  const itemsEl = document.getElementById("palletItems");
+  if (!items || !items.length){
+    itemsEl.innerHTML = '<div class="empty-hint">Chưa có tem nào — quét tem để thêm.</div>';
+    return;
+  }
+  itemsEl.innerHTML = items.map(it =>
+    '<div class="item-row"><div><div class="tag">' + it.tag_no + '</div></div><div class="sl">' + it.so_luong + '</div></div>'
+  ).join("");
+}
+
+document.getElementById("btnNewPallet").addEventListener("click", async () => {
+  showMsg("⏳ Đang tạo pallet mới...", "wait");
+  const { data, error } = await sb.rpc('oqc_tao_pallet', { p_nguoi: currentNguoi });
+  if (error) return err("Lỗi tạo pallet: " + error.message);
+  currentPalletId = data;
+  document.getElementById("msg").style.display = "none";
+  await refreshPalletView();
+});
+
+document.getElementById("btnClosePallet").addEventListener("click", async () => {
+  if (!currentPalletId) return;
+  if (!window.confirm("Đóng gói xong pallet " + currentPalletId + "? Pallet vẫn cần được mang tới kho và quét \"Nhập kho\" (kho-thanh-pham.html) mới tính là đã nhập kho thật.")) return;
+  showMsg("⏳ Đang đóng gói...", "wait");
+  const { error } = await sb.rpc('oqc_dong_pallet', { p_id_pallet: currentPalletId });
+  if (error) return err("Lỗi đóng pallet: " + error.message);
+  const { data: items } = await sb.from('oqc_pallet_item').select('tag_no,so_luong').eq('id_pallet', currentPalletId);
+  const closedId = currentPalletId;
+  const { data: pallet } = await sb.from('oqc_pallet').select('*').eq('id_pallet', closedId).maybeSingle();
+  showMsg("✅ Đã đóng gói xong pallet " + closedId + " — nhớ mang tới kho và quét Nhập kho", "ok", 8000);
+  printPalletLabel(closedId, pallet, items || []);
+  currentPalletId = null;
+  await refreshPalletView();
+});
+
+// =============================================================================
+// QUÉT QR + THÊM VÀO PALLET (cùng cách intem.html/chuyencongdoan.html dùng)
+// =============================================================================
+let html5QrCode = null;
+let scanningActive = false;
+function getScanner(){ if (!html5QrCode) html5QrCode = new Html5Qrcode("qrReaderDiv"); return html5QrCode; }
+
+async function openCameraForScan(){
+  document.getElementById("msg").style.display = "none";
+  if (typeof Html5Qrcode !== "function"){ err("Lỗi tải thư viện đọc QR — kiểm tra kết nối mạng rồi tải lại trang."); return; }
+  document.getElementById("qrModal").classList.add("show");
+  const scanner = getScanner();
+  scanningActive = true;
+  try {
+    await scanner.start(
+      { facingMode: "environment" },
+      { fps: 8, qrbox: { width: 260, height: 260 } },
+      onScanSuccess,
+      () => {}
+    );
+  } catch(e){
+    scanningActive = false;
+    await closeQrModal();
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      showMsg("📷 Trình duyệt không hỗ trợ camera trực tiếp — mở chế độ chụp ảnh…", "wait");
+      document.getElementById("qrFileInput").click();
+      return;
+    }
+    err("Không mở được camera: " + e + ". Kiểm tra đã cho phép quyền Camera cho trang này chưa.");
+  }
+}
+async function closeQrModal(){
+  document.getElementById("qrModal").classList.remove("show");
+  scanningActive = false;
+  if (html5QrCode && html5QrCode.isScanning){ try { await html5QrCode.stop(); } catch(e){} }
+}
+async function onScanSuccess(decodedText){
+  if (!scanningActive) return;
+  scanningActive = false;
+  try { await closeQrModal(); await onTagScanned(String(decodedText).split(">")[0].trim()); }
+  catch(e){ err("Lỗi xử lý dữ liệu vừa quét: " + (e && e.message ? e.message : e)); }
+}
+function onFileChosen(evt){
+  const file = evt.target.files && evt.target.files[0];
+  if (!file) { err("Không nhận được ảnh (có thể bạn đã huỷ chụp)."); return; }
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    const canvas = document.getElementById("scanCanvas");
+    const ctx = canvas.getContext("2d");
+    canvas.width = img.width; canvas.height = img.height;
+    ctx.drawImage(img, 0, 0, img.width, img.height);
+    URL.revokeObjectURL(url);
+    const data = ctx.getImageData(0, 0, img.width, img.height);
+    const code = jsQR(data.data, data.width, data.height);
+    if (code && code.data) onTagScanned(String(code.data).split(">")[0].trim());
+    else err("Không đọc được mã QR trong ảnh — chụp lại, đảm bảo mã QR rõ nét và nằm giữa khung ảnh.");
+    evt.target.value = "";
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); err("Không đọc được ảnh vừa chụp."); };
+  img.src = url;
+}
+
+async function onTagScanned(tagNo){
+  if (!tagNo) return err("Mã QR không đúng định dạng tem TOYOTAKI.");
+  if (!currentPalletId) return err("Bắt đầu pallet mới trước khi quét tem.");
+  showMsg("⏳ Đang tra cứu tem " + tagNo + "...", "wait");
+  const { data, error } = await sb.from('duc_tem').select('*').eq('tag_no', tagNo).maybeSingle();
+  if (error) return err("Lỗi tra cứu: " + error.message);
+  if (!data) return err("Không tìm thấy tem " + tagNo);
+
+  const { data: already } = await sb.from('oqc_pallet_item').select('id_pallet').eq('tag_no', tagNo).maybeSingle();
+  if (already) return err("Tem " + tagNo + " đã nằm trong pallet " + already.id_pallet + " rồi.");
+
+  pendingTagNo = tagNo;
+  document.getElementById("pendingInfo").innerHTML =
+    '<b>' + data.tag_no + '</b> — ' + (data.ten_sp || '') + ' (' + (data.ma_sp || '') + ')'
+    + '<br>Số lượng trên tem: ' + (data.so_luong || 0) + ' · Khuôn: ' + (data.so_khuon || '—') + ' · Máy: ' + (data.may_duc_chi_thi || '—');
+  document.getElementById("pendingSoLuong").value = data.so_luong || "";
+  document.getElementById("pendingSoLuong").max = data.so_luong || "";
+  document.getElementById("pendingCard").style.display = "block";
+  document.getElementById("msg").style.display = "none";
+}
+
+document.getElementById("btnAddToPallet").addEventListener("click", async () => {
+  const sl = Number(document.getElementById("pendingSoLuong").value);
+  if (!sl || sl <= 0) return err("Số lượng phải > 0");
+  showMsg("⏳ Đang thêm vào pallet...", "wait");
+  const { error } = await sb.rpc('oqc_them_tem_vao_pallet', {
+    p_id_pallet: currentPalletId, p_tag_no: pendingTagNo, p_so_luong: sl, p_nguoi: currentNguoi,
+  });
+  if (error) return err("Lỗi thêm vào pallet: " + error.message);
+  pendingTagNo = null;
+  document.getElementById("pendingCard").style.display = "none";
+  showMsg("✅ Đã thêm " + sl + " vào pallet " + currentPalletId, "ok", 3000);
+  await refreshPalletView();
+});
+document.getElementById("btnCancelPending").addEventListener("click", () => {
+  pendingTagNo = null;
+  document.getElementById("pendingCard").style.display = "none";
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById("btnScan").addEventListener("click", openCameraForScan);
+  document.getElementById("btnCloseQrModal").addEventListener("click", closeQrModal);
+  document.getElementById("qrFileInput").addEventListener("change", onFileChosen);
+  document.getElementById("manualTagInput").addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const v = e.target.value.trim();
+    if (!v) return;
+    e.target.value = "";
+    onTagScanned(v.split(">")[0].trim());
+  });
+});
+
+// =============================================================================
+// TRA CỨU PALLET ĐÃ ĐÓNG GÓI
+// =============================================================================
+async function lookupPallet(){
+  const id = document.getElementById("lookupPalletId").value.trim();
+  if (!id) return err("Nhập mã pallet để tra cứu");
+  const { data: pallet } = await sb.from('oqc_pallet').select('*').eq('id_pallet', id).maybeSingle();
+  if (!pallet) { document.getElementById("lookupResult").innerHTML = '<div class="empty-hint">Không tìm thấy pallet ' + id + '</div>'; return; }
+  const { data: items } = await sb.from('oqc_pallet_item').select('tag_no,so_luong').eq('id_pallet', id).order('thoi_diem_quet');
+  const rows = (items || []).map(it => '<div class="item-row"><div class="tag">' + it.tag_no + '</div><div class="sl">' + it.so_luong + '</div></div>').join("");
+  const trangThaiLabel = {
+    dang_dong_goi: '⏳ Đang đóng gói', da_dong_goi: '📦 Đã đóng gói xong, chờ nhập kho',
+    da_nhap_kho: '✅ Đã nhập kho', da_xuat: '🚚 Đã xuất kho',
+  }[pallet.trang_thai] || pallet.trang_thai;
+  const moc_thoi_gian = pallet.trang_thai === 'da_nhap_kho' ? pallet.thoi_diem_nhap_kho
+    : pallet.trang_thai === 'da_dong_goi' ? pallet.thoi_diem_dong_goi : null;
+  document.getElementById("lookupResult").innerHTML =
+    '<div class="pallet-hdr"><div class="pallet-id">' + pallet.id_pallet + '</div><div class="pallet-total">Tổng: ' + pallet.tong_so_luong + '</div></div>'
+    + '<div style="font-size:11px;color:#888;margin-bottom:8px">Trạng thái: ' + trangThaiLabel
+    + (moc_thoi_gian ? (' · ' + new Date(moc_thoi_gian).toLocaleString('vi-VN', { hour12: false })) : '') + '</div>'
+    + rows;
+}
+
+// =============================================================================
+// IN NHÃN PALLET
+// =============================================================================
+function buildQrRects(data, sizeMm, bgColor, fgColor){
+  var qr = qrcode(0, "M");
+  qr.addData(data);
+  qr.make();
+  var n = qr.getModuleCount();
+  var cell = sizeMm / n;
+  var out = '<rect x="0" y="0" width="'+sizeMm+'" height="'+sizeMm+'" fill="'+bgColor+'"/>';
+  for (var r=0; r<n; r++){
+    for (var c=0; c<n; c++){
+      if (qr.isDark(r,c)){
+        out += '<rect x="'+(c*cell).toFixed(3)+'" y="'+(r*cell).toFixed(3)+'" width="'+cell.toFixed(3)+'" height="'+cell.toFixed(3)+'" fill="'+fgColor+'"/>';
+      }
+    }
+  }
+  return out;
+}
+
+function printPalletLabel(id, pallet, items){
+  var qrData = [id, pallet ? pallet.tong_so_luong : '', new Date().toISOString()].join(">\n");
+  var itemsHtml = items.map(it => '<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;border-bottom:1px dashed #ccc">'
+    + '<span>' + it.tag_no + '</span><span>' + it.so_luong + '</span></div>').join("");
+  var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 100" width="72mm" height="100mm">'
+    + '<rect x="0" y="0" width="72" height="100" fill="#fff"/>'
+    + '<text x="36" y="8" font-size="4.2" font-weight="700" text-anchor="middle" font-family="Arial">PALLET THÀNH PHẨM</text>'
+    + '<text x="36" y="14" font-size="5.5" font-weight="800" text-anchor="middle" font-family="Arial">' + id + '</text>'
+    + '<g transform="translate(16,18)">' + buildQrRects(qrData, 40, '#fff', '#000') + '</g>'
+    + '<text x="36" y="62" font-size="4.5" font-weight="700" text-anchor="middle" font-family="Arial">Tổng số lượng: ' + (pallet ? pallet.tong_so_luong : '') + '</text>'
+    + '</svg>';
+  var popupHtml = '<!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Pallet: ' + id + '</title>'
+    + '<style>@page{size:72mm 100mm;margin:0}*{margin:0;padding:0;box-sizing:border-box}html,body{width:72mm;background:#fff}'
+    + '.pbtn{position:fixed;bottom:14px;right:14px;background:#2a7a4f;color:#fff;border:none;border-radius:8px;padding:9px 18px;font-size:13px;font-weight:bold;cursor:pointer}'
+    + '@media print{.pbtn{display:none}}.itemslist{width:72mm;padding:2mm 4mm;font-family:Arial}</style></head><body>'
+    + svg + '<div class="itemslist">' + itemsHtml + '</div>'
+    + '<button class="pbtn" onclick="window.print()">🖨 In ngay</button>'
+    + '<script>setTimeout(function(){window.print();},150);<\/script></body></html>';
+  var w = window.open("", "_blank", "width=430,height=720,scrollbars=yes");
+  if (!w) { err("Trình duyệt chặn popup — vào Settings cho phép popup rồi thử lại"); return; }
+  w.document.open(); w.document.write(popupHtml); w.document.close();
+}
+</script>
+</body>
+</html>

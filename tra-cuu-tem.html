@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tra cứu tem đã in — TOYOTAKI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet"></noscript>
+<!--
+  tra-cuu-tem.html — danh sách tem (duc_tem) mới nhất, lọc theo ngày in/máy/
+  mã SP, tải thêm theo trang 100 bản ghi. Khác với tab "Tra cứu Tem" ở
+  intem.html (chỉ tra CHÍNH XÁC 1 Tag No/quét QR) — trang này để DUYỆT/lọc
+  danh sách. Bấm "Chi tiết" 1 dòng mở sang intem.html?tagNo=... (tab Tra cứu,
+  tự điền + tìm sẵn) để xem/sửa đầy đủ — gồm cả "Ngày giờ SX thực tế".
+  duc_tem đã có RLS đọc công khai (schema_duc.sql) — không cần migration mới.
+-->
+<style>
+:root{--bg-page:#EEF1F5;--bg-panel:#FFFFFF;--bg-sunken:#F5F7FA;--bg-header:#1E293B;--border:#D9DFE5;--border-strong:#B8C1CC;--text:#0F172A;--text-muted:#64748B;--text-dim:#94A3B8;--accent:#0F5FA5;--accent-hover:#0A4681;--run-fg:#047857;--run-bg:#ECFDF5;--warn-fg:#B45309;--warn-bg:#FFFBEB;--alarm-fg:#B91C1C;--alarm-bg:#FEF2F2;--shadow-sm:0 1px 2px rgba(15,23,42,0.04);--shadow-md:0 4px 12px rgba(15,23,42,0.08);--shadow-lg:0 12px 32px rgba(15,23,42,0.16);}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background:var(--bg-page);min-height:100vh;color:var(--text);font-size:13px;line-height:1.35;-webkit-font-smoothing:antialiased}
+body{padding:6px 6px 60px}
+.wrap{margin:6px 0 0;display:flex;flex-direction:column;gap:6px}
+header{background:var(--bg-header);color:#F1F5F9;border-radius:8px;padding:6px 14px;display:flex;align-items:center;gap:14px;box-shadow:var(--shadow-sm);flex-wrap:wrap}
+.brand{display:flex;flex-direction:column;line-height:1.2}
+.brand .co{font-size:9px;letter-spacing:.08em;color:#94A3B8;text-transform:uppercase;font-weight:500}
+.brand .title{font-size:14px;font-weight:700;letter-spacing:-.01em;color:#FFF}
+.header-group{display:flex;align-items:center;gap:6px}
+.header-label{font-size:10px;color:#94A3B8;text-transform:uppercase;letter-spacing:.05em;font-weight:500}
+.header-select,.header-input{background:#334155;color:#F1F5F9;border:1px solid #475569;border-radius:5px;padding:4px 8px;font-family:inherit;font-size:12px;font-weight:500;cursor:pointer;outline:none}
+.header-select:hover{background:#3F5266}
+.btn-ghost{background:transparent;color:#F1F5F9;border:1px solid #475569}
+.btn-ghost:hover{background:#334155}
+.header-clock{margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;padding:0 10px;line-height:1.15}
+.header-clock .date{font-size:10px;color:#94A3B8}
+.header-clock .time{font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;color:#FFF;letter-spacing:-.02em}
+.card{background:var(--bg-panel);border-radius:8px;box-shadow:var(--shadow-sm);border:1px solid var(--border);padding:14px 16px}
+.btn{border:none;border-radius:5px;padding:8px 16px;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;transition:background .12s;background:var(--accent);color:#fff}
+.btn:hover{background:var(--accent-hover)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-outline{background:transparent;border:1.5px solid var(--accent);color:var(--accent)}
+.btn-outline:hover{background:var(--bg-sunken)}
+header .btn-outline{border-color:#475569;color:#F1F5F9;background:transparent}
+header .btn-outline:hover{background:#334155}
+.result-count{font-size:12px;color:var(--text-muted);margin-bottom:10px}
+.tbl-wrap{overflow-x:auto;border-radius:8px;border:1px solid var(--border)}
+table{border-collapse:collapse;width:100%;font-size:12px;min-width:1180px}
+th,td{border-bottom:1px solid var(--border);padding:7px 8px;text-align:left;white-space:nowrap}
+th{background:var(--bg-sunken);color:var(--text-muted);font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;font-weight:700;position:sticky;top:0}
+td.num{text-align:right;font-family:'JetBrains Mono',monospace}
+tr:hover td{background:var(--bg-sunken)}
+.empty-row td{text-align:center;color:var(--text-dim);padding:24px;font-style:italic}
+.tag-mono{font-family:'JetBrains Mono',monospace;font-size:11.5px}
+.badge{display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:var(--bg-sunken);color:var(--text-muted)}
+.badge.xuat{background:var(--run-bg);color:var(--run-fg)}
+.load-more-wrap{text-align:center;margin-top:16px}
+#msg{margin:0 0 6px;padding:11px 14px;border-radius:8px;font-size:13px;font-weight:600;display:none}
+.err{background:var(--alarm-bg);color:var(--alarm-fg);border:1px solid #FCA5A5;display:block!important}
+</style>
+</head>
+<body>
+
+<div id="msg"></div>
+
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="co">Toyotaki</div>
+      <div class="title">Tra cứu tem đã in</div>
+    </div>
+    <div class="header-group">
+      <span class="header-label">Ngày in</span>
+      <input type="date" id="fNgayIn" class="header-input">
+    </div>
+    <div class="header-group">
+      <span class="header-label">Máy</span>
+      <select id="fMay" class="header-select"><option value="">— Tất cả —</option></select>
+    </div>
+    <div class="header-group">
+      <span class="header-label">Mã sản phẩm</span>
+      <select id="fMaSp" class="header-select"><option value="">— Tất cả —</option></select>
+    </div>
+    <button type="button" class="btn" id="btnLoc">Lọc</button>
+    <button type="button" class="btn-outline btn" id="btnXoaLoc">Xoá lọc</button>
+    <div class="header-clock">
+      <div class="date" id="hdrClockDate"></div>
+      <div class="time" id="hdrClockTime"></div>
+    </div>
+  </header>
+
+  <div class="card">
+    <div class="result-count" id="resultCount">Đang tải…</div>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Tag No</th><th>Ngày in</th><th>Ngày SX</th><th>Mã SP</th><th>Tên SP</th>
+            <th>Máy</th><th>Số khuôn</th><th class="num">Số lượng</th>
+            <th>Ngày giờ SX thực tế</th><th>Người thao tác</th><th>Trạng thái</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="tbody">
+          <tr class="empty-row"><td colspan="12">Đang tải…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="load-more-wrap">
+      <button type="button" class="btn-outline btn" id="btnLoadMore">Tải thêm 100 bản ghi</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="shared/supabase-client.js"></script>
+<script src="shared/navbar.js"></script>
+<script>
+const PAGE_SIZE = 100;
+let offset = 0;
+let rows = [];
+let noMore = false;
+
+function escapeHtml(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtNum(n){ return (Number(n)||0).toLocaleString('vi-VN'); }
+function fmtDateVN(dateStr){
+  if (!dateStr) return '—';
+  const [y,m,d] = String(dateStr).slice(0,10).split('-');
+  return d + '/' + m + '/' + y;
+}
+function fmtDateTimeVN(iso){
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + d.getFullYear()
+    + ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+}
+function showMsg(text, cls, ms){
+  const el = document.getElementById('msg');
+  el.textContent = text; el.className = cls;
+  if (ms) setTimeout(() => { el.className = ''; }, ms);
+}
+
+function startHeaderClock(){
+  function tick(){
+    const d = new Date();
+    document.getElementById('hdrClockDate').textContent = d.toLocaleDateString('vi-VN');
+    document.getElementById('hdrClockTime').textContent = d.toLocaleTimeString('vi-VN', { hour12: false });
+  }
+  tick();
+  setInterval(tick, 1000);
+}
+
+async function loadFilterLists(){
+  const [mMay, mSp] = await Promise.all([
+    sb.from('master_machines').select('ma_may').or('bo_phan.eq.Đúc,bo_phan.is.null').order('ma_may'),
+    sb.from('master_products').select('ma_sp,ten_sp').order('ma_sp'),
+  ]);
+  const selMay = document.getElementById('fMay');
+  (mMay.data || []).forEach(r => {
+    if (!r.ma_may) return;
+    selMay.innerHTML += '<option value="' + escapeHtml(r.ma_may) + '">' + escapeHtml(r.ma_may) + '</option>';
+  });
+  const selSp = document.getElementById('fMaSp');
+  (mSp.data || []).forEach(r => {
+    if (!r.ma_sp) return;
+    selSp.innerHTML += '<option value="' + escapeHtml(r.ma_sp) + '">' + escapeHtml(r.ma_sp) + (r.ten_sp ? ' — ' + escapeHtml(r.ten_sp) : '') + '</option>';
+  });
+}
+
+function buildQuery(){
+  let q = sb.from('duc_tem').select('*', { count: 'exact' });
+  const ngayIn = document.getElementById('fNgayIn').value;
+  const may = document.getElementById('fMay').value;
+  const maSp = document.getElementById('fMaSp').value;
+  if (ngayIn) {
+    // ngay_gio_in là timestamptz — lọc theo đúng ngày (00:00 -> 23:59:59) giờ VN.
+    q = q.gte('ngay_gio_in', ngayIn + 'T00:00:00+07:00').lt('ngay_gio_in', ngayIn + 'T23:59:59.999+07:00');
+  }
+  if (may) q = q.eq('may_duc_chi_thi', may);
+  if (maSp) q = q.eq('ma_sp', maSp);
+  return q;
+}
+
+async function loadFirstPage(){
+  offset = 0; rows = []; noMore = false;
+  document.getElementById('tbody').innerHTML = '<tr class="empty-row"><td colspan="12">Đang tải…</td></tr>';
+  document.getElementById('resultCount').textContent = 'Đang tải…';
+  await loadMore(true);
+}
+
+async function loadMore(isFirst){
+  const btn = document.getElementById('btnLoadMore');
+  btn.disabled = true; btn.textContent = 'Đang tải…';
+  const { data, error, count } = await buildQuery()
+    .order('ngay_gio_in', { ascending: false, nullsFirst: false })
+    .order('tag_no', { ascending: false })
+    .range(offset, offset + PAGE_SIZE - 1);
+  btn.disabled = false; btn.textContent = 'Tải thêm ' + PAGE_SIZE + ' bản ghi';
+  if (error) { showMsg('Lỗi tải dữ liệu: ' + error.message, 'err'); return; }
+
+  const page = data || [];
+  rows = isFirst ? page : rows.concat(page);
+  offset += page.length;
+  noMore = page.length < PAGE_SIZE;
+  btn.style.display = noMore ? 'none' : '';
+
+  renderRows();
+  document.getElementById('resultCount').textContent =
+    rows.length + (count != null ? ' / ' + fmtNum(count) + ' bản ghi khớp bộ lọc' : ' bản ghi');
+}
+
+function renderRows(){
+  const tbody = document.getElementById('tbody');
+  if (rows.length === 0) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="12">Không tìm thấy tem nào khớp bộ lọc.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(r => `
+    <tr>
+      <td class="tag-mono">${escapeHtml(r.tag_no)}</td>
+      <td>${fmtDateTimeVN(r.ngay_gio_in)}</td>
+      <td>${fmtDateVN(r.ngay)}</td>
+      <td>${escapeHtml(r.ma_sp)}</td>
+      <td>${escapeHtml(r.ten_sp)}</td>
+      <td>${escapeHtml(r.may_duc_chi_thi)}</td>
+      <td>${escapeHtml(r.so_khuon)}</td>
+      <td class="num">${fmtNum(r.so_luong)}</td>
+      <td>${r.ngay_gio_ghi_nhan
+        ? fmtDateTimeVN(r.ngay_gio_ghi_nhan)
+        : (r.ngay_gio_in ? fmtDateTimeVN(r.ngay_gio_in) + ' <span style="color:var(--text-muted);font-size:10.5px">(giờ in)</span>' : '—')}</td>
+      <td>${escapeHtml(r.nguoi_tt) || '—'}</td>
+      <td><span class="badge${r.trang_thai === 'Đã xuất' ? ' xuat' : ''}">${escapeHtml(r.trang_thai || '—')}</span></td>
+      <td><a href="intem.html?tagNo=${encodeURIComponent(r.tag_no)}" target="_blank" rel="noopener"><button type="button" class="btn-outline btn" style="padding:5px 9px;font-size:11.5px">Chi tiết</button></a></td>
+    </tr>`).join('');
+}
+
+document.getElementById('btnLoc').addEventListener('click', loadFirstPage);
+document.getElementById('btnXoaLoc').addEventListener('click', () => {
+  document.getElementById('fNgayIn').value = '';
+  document.getElementById('fMay').value = '';
+  document.getElementById('fMaSp').value = '';
+  loadFirstPage();
+});
+document.getElementById('btnLoadMore').addEventListener('click', () => loadMore(false));
+
+startHeaderClock();
+loadFilterLists();
+loadFirstPage();
+</script>
+</body>
+</html>

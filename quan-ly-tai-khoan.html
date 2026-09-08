@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>Quản Lý Tài Khoản & Phân Quyền — MES Toyotaki</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet"></noscript>
+<style>
+  :root{
+    --bg-page:#EEF1F5; --bg-panel:#FFFFFF; --bg-sunken:#F5F7FA; --bg-header:#1E293B;
+    --border:#D9DFE5; --border-strong:#B8C1CC; --text:#0F172A; --text-muted:#64748B; --text-dim:#94A3B8;
+    --accent:#0F5FA5; --accent-hover:#0A4681; --run-fg:#047857; --run-bg:#ECFDF5;
+    --warn-fg:#B45309; --warn-bg:#FFFBEB; --alarm-fg:#B91C1C; --alarm-bg:#FEF2F2;
+    --shadow-sm:0 1px 2px rgba(15,23,42,0.04); --shadow-md:0 4px 12px rgba(15,23,42,0.08); --shadow-lg:0 12px 32px rgba(15,23,42,0.16);
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg-page);font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;color:var(--text);font-size:13px;line-height:1.35;-webkit-font-smoothing:antialiased;}
+  h1,h2,h3{font-family:'Inter',sans-serif;}
+
+  .hdr-wrap{max-width:none;margin:6px 0 0;padding:0 28px;}
+  header{background:var(--bg-header);color:#F1F5F9;border-radius:8px;padding:6px 14px;display:flex;align-items:center;gap:14px;box-shadow:var(--shadow-sm);flex-wrap:wrap;}
+  .brand{display:flex;flex-direction:column;line-height:1.2;}
+  .brand .co{font-size:9px;letter-spacing:.08em;color:#94A3B8;text-transform:uppercase;font-weight:500;}
+  .brand .title{font-size:14px;font-weight:700;letter-spacing:-.01em;color:#FFF;}
+  .header-clock{margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;padding:0 10px;line-height:1.15;}
+  .header-clock .date{font-size:10px;color:#94A3B8;}
+  .header-clock .time{font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;color:#FFF;letter-spacing:-.02em;}
+
+  .wrap{max-width:none;margin:0;padding:20px 28px 60px;}
+
+  .card{background:var(--bg-panel);border:1px solid var(--border);border-radius:8px;padding:22px 24px;margin-bottom:24px;box-shadow:var(--shadow-sm);}
+  .card h2{font-size:15px;margin:0 0 16px;font-weight:700;border-bottom:1px solid var(--border);padding-bottom:10px;}
+
+  .msg{padding:12px 14px;border-radius:8px;font-size:13px;margin-bottom:16px;display:none;}
+  .msg.error{display:block;background:var(--alarm-bg);color:var(--alarm-fg);border:1px solid #FCA5A5;}
+  .msg.ok{display:block;background:var(--run-bg);color:var(--run-fg);border:1px solid #A7F3D0;}
+  .msg.info{display:block;background:var(--bg-sunken);color:var(--text-muted);border:1px solid var(--border);}
+
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  @media (max-width:640px){.form-grid{grid-template-columns:1fr;}}
+  label{display:block;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;}
+  input,select{width:100%;padding:9px 11px;border:1.5px solid var(--border-strong);border-radius:5px;font-size:13.5px;font-family:inherit;background:#fff;color:var(--text);}
+  input:focus,select:focus{outline:none;border-color:var(--accent);}
+  button{padding:10px 20px;border:none;border-radius:5px;background:var(--accent);color:#fff;font-size:13.5px;font-weight:600;cursor:pointer;}
+  button:hover:not(:disabled){background:var(--accent-hover);}
+  button:disabled{opacity:.6;cursor:default;}
+  .form-actions{margin-top:16px;}
+
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--border);}
+  th{background:var(--bg-sunken);color:var(--text-muted);font-weight:700;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;position:sticky;top:0;z-index:1;}
+  th.sortable{cursor:pointer;user-select:none;}
+  th.sortable:hover{color:var(--text);}
+  th.sortable[data-dir="asc"]::after{content:" ▲";font-size:9px;}
+  th.sortable[data-dir="desc"]::after{content:" ▼";font-size:9px;}
+  td select{padding:6px 8px;font-size:12.5px;}
+  .role-save{padding:6px 12px;font-size:12px;margin-left:8px;}
+  .muted{color:var(--text-muted);font-size:12px;}
+  .empty{padding:20px;text-align:center;color:var(--text-dim);font-size:13px;}
+  .table-wrap{overflow-x:auto;max-height:calc(100vh - 210px);overflow-y:auto;border-radius:6px;}
+
+  .pane-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;}
+  .pane-toolbar .list-search{width:250px;flex:0 0 auto;}
+  .pane-toolbar .list-filter{width:auto;flex:0 0 auto;min-width:150px;}
+  .pane-toolbar .list-count{font-size:12px;color:var(--text-muted);white-space:nowrap;}
+  .pane-toolbar .btn-add{margin-left:auto;flex:0 0 auto;}
+  .pane-toolbar .btn-reset{background:transparent;color:var(--text-muted);border:1.5px solid var(--border-strong);padding:8px 12px;}
+  .pane-toolbar .btn-reset:hover{background:var(--bg-sunken);color:var(--text);}
+
+  .toast{position:fixed;top:16px;right:16px;z-index:1000;background:var(--run-fg);color:#fff;padding:10px 16px;border-radius:6px;box-shadow:var(--shadow-lg);font-size:13px;font-weight:600;opacity:0;transform:translateY(-8px);transition:opacity .2s, transform .2s;pointer-events:none;}
+  .toast.show{opacity:1;transform:none;}
+  .toast.err{background:var(--alarm-fg);}
+  .bp-check-group{display:flex;flex-wrap:wrap;gap:10px;padding:9px 0}
+  .bp-check-group label{display:flex;align-items:center;gap:5px;font-size:12.5px;font-weight:500;color:var(--text);text-transform:none;letter-spacing:normal;margin:0;cursor:pointer}
+  .bp-check-group input{width:auto}
+  .reset-pw-btn{padding:6px 10px;font-size:12px;background:var(--bg-header);margin-left:6px}
+  .reset-pw-btn:hover{background:#334155}
+  .modal-mask{display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);align-items:center;justify-content:center;z-index:100;padding:14px;overflow-y:auto}
+  .modal-mask.open{display:flex}
+  .modal-mask.top{align-items:flex-start;padding:40px 14px}
+  .modal{background:var(--bg-panel);border-radius:8px;max-width:380px;width:100%;padding:22px;box-shadow:var(--shadow-lg);position:relative}
+  .modal.wide{max-width:760px}
+  .modal h3{font-size:15px;margin:0 0 14px;font-family:'Inter',sans-serif;font-weight:700;}
+  .modal .form-actions{display:flex;justify-content:flex-end;gap:8px}
+  .modal button.btn-outline{background:#fff;border:1.5px solid var(--border-strong);color:var(--text)}
+  .modal-close{position:absolute;top:12px;right:14px;background:transparent;color:var(--text-muted);font-size:16px;font-weight:700;padding:4px 9px;border-radius:6px}
+  .modal-close:hover{background:var(--bg-sunken);color:var(--text)}
+</style>
+</head>
+<body>
+
+<div class="hdr-wrap">
+  <header>
+    <div class="brand">
+      <div class="co">Toyotaki</div>
+      <div class="title">Quản Lý Tài Khoản</div>
+    </div>
+    <div class="header-clock">
+      <div class="date" id="hdrClockDate"></div>
+      <div class="time" id="hdrClockTime"></div>
+    </div>
+  </header>
+</div>
+
+<div class="wrap">
+  <div id="gate"></div>
+
+  <div id="adminArea" style="display:none">
+    <div class="pane-toolbar">
+      <input type="search" class="list-search" id="uSearch" placeholder="Lọc nhanh: mã NV / email / họ tên…" autocomplete="off">
+      <select class="list-filter" id="uFilterRole"></select>
+      <button type="button" class="btn-reset" id="uClear">Xoá lọc</button>
+      <span class="list-count" id="uCount"></span>
+      <button type="button" class="btn-add" id="uAdd">＋ Thêm mới</button>
+    </div>
+    <div class="card">
+      <div class="msg" id="listMsg"></div>
+      <div class="table-wrap">
+        <table id="userTable" style="display:none">
+          <thead>
+            <tr>
+              <th class="sortable" data-k="id">Mã NV / Email</th>
+              <th class="sortable" data-k="full_name">Họ tên</th>
+              <th class="sortable" data-k="role">Vai trò</th>
+              <th>Bộ phận</th>
+              <th class="sortable" data-k="created_at">Tạo lúc</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="userTbody"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="userEmpty" style="display:none">Chưa có tài khoản nào được gán vai trò.</div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: tạo tài khoản mới -->
+<div class="modal-mask top" id="createMask">
+  <div class="modal wide">
+    <button type="button" class="modal-close" id="createClose" aria-label="Đóng">✕</button>
+    <h3>Tạo tài khoản mới</h3>
+    <div class="msg" id="createMsg"></div>
+    <form id="createForm">
+      <div class="form-grid">
+        <div>
+          <label for="cUsername">Mã nhân viên (dùng để đăng nhập)</label>
+          <input type="text" id="cUsername" placeholder="vd: nv001" autocomplete="off">
+        </div>
+        <div>
+          <label for="cEmail">Email thật (tuỳ chọn, nếu có)</label>
+          <input type="email" id="cEmail" autocomplete="off">
+        </div>
+        <div>
+          <label for="cFullName">Họ tên (tuỳ chọn)</label>
+          <input type="text" id="cFullName" autocomplete="off">
+        </div>
+        <div>
+          <label for="cPassword">Mật khẩu tạm</label>
+          <input type="text" id="cPassword" required minlength="6" autocomplete="off">
+        </div>
+        <div>
+          <label for="cRole">Vai trò</label>
+          <select id="cRole" required></select>
+        </div>
+        <div id="cBoPhanWrap" style="display:none">
+          <label>Bộ phận phụ trách (chọn 1 hoặc nhiều)</label>
+          <div id="cBoPhan" class="bp-check-group"></div>
+        </div>
+      </div>
+      <p class="muted" style="margin:10px 0 0">Điền ít nhất 1 trong 2: mã nhân viên (công nhân không có email) hoặc email thật.</p>
+      <div class="form-actions">
+        <button type="button" class="btn-outline" id="createCancel" style="border-radius:5px">Huỷ</button>
+        <button type="submit" id="createBtn">Tạo tài khoản</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- MODAL: admin đặt lại mật khẩu cho 1 tài khoản -->
+<div class="modal-mask" id="resetPwMask">
+  <div class="modal">
+    <h3>🔑 Đặt lại mật khẩu — <span id="resetPwWho"></span></h3>
+    <label for="resetPwNew">Mật khẩu mới (tối thiểu 6 ký tự)</label>
+    <input type="text" id="resetPwNew" minlength="6" autocomplete="off">
+    <div class="msg" id="resetPwMsg"></div>
+    <div class="form-actions">
+      <button type="button" class="btn-outline" id="resetPwCancel" style="border-radius:8px;padding:9px 16px;font-size:13.5px;cursor:pointer">Huỷ</button>
+      <button type="button" id="resetPwSubmit" style="margin-top:0">Đặt lại</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="shared/supabase-client.js"></script>
+<script src="shared/navbar.js"></script>
+<script>
+const ROLE_LABELS = {
+  admin: 'Admin',
+  truong_ca: 'Trưởng ca',
+  ipqc: 'IPQC',
+  qc_manager: 'QC Manager',
+  kho_nvl: 'Kho NVL',
+  ke_hoach: 'Kế hoạch',
+  qlsx_nhan_vien: 'QLSX — Nhân viên (lập KHSX)',
+  qlsx_truong_phong: 'QLSX — Trưởng phòng (duyệt bước 1)',
+  quan_ly_bo_phan: 'Quản lý bộ phận (duyệt bước 2)',
+  giam_doc_sx: 'Giám đốc sản xuất (duyệt cuối)',
+};
+const BO_PHAN_LIST = ['Đúc', 'Bavia', 'Gia Công', 'Cắt viền', 'Sơn', 'OQC'];
+
+let currentSession = null;
+
+let usersData = [];
+let uSort = { k: 'created_at', dir: -1 };
+let uQ = '';
+let uRole = '';
+
+let toastTimer;
+function toast(text, isErr){
+  let el = document.getElementById('toast');
+  if (!el){ el = document.createElement('div'); el.id = 'toast'; el.className = 'toast'; document.body.appendChild(el); }
+  el.textContent = text;
+  el.classList.toggle('err', !!isErr);
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
+}
+
+function openCreateModal(){
+  document.getElementById('createForm').reset();
+  fillRoleSelect(document.getElementById('cRole'), '');
+  fillBoPhanChecks(document.getElementById('cBoPhan'), []);
+  document.getElementById('cBoPhanWrap').style.display = 'none';
+  const m = document.getElementById('createMsg'); m.className = 'msg'; m.textContent = '';
+  document.getElementById('createMask').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeCreateModal(){
+  document.getElementById('createMask').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+function fillRoleSelect(sel, selected){
+  sel.innerHTML = Object.entries(ROLE_LABELS).map(([v, l]) =>
+    `<option value="${v}" ${v === selected ? 'selected' : ''}>${l}</option>`
+  ).join('');
+}
+// Quản lý bộ phận có thể phụ trách NHIỀU công đoạn (VD 1 người quản lý cả
+// Gia Công và Sơn) — dùng nhóm checkbox thay vì <select> chỉ chọn 1.
+function fillBoPhanChecks(container, selectedArr){
+  const selected = new Set(selectedArr || []);
+  container.innerHTML = BO_PHAN_LIST.map(v =>
+    `<label><input type="checkbox" value="${v}" ${selected.has(v) ? 'checked' : ''}> ${v}</label>`
+  ).join('');
+}
+function getBoPhanChecked(container){
+  return Array.from(container.querySelectorAll('input:checked')).map(i => i.value);
+}
+
+async function loadUsers(){
+  const listMsg = document.getElementById('listMsg');
+  const { data, error } = await sb
+    .from('user_roles')
+    .select('user_id, email, username, full_name, role, bo_phan_phu_trach, created_at')
+    .order('created_at', { ascending: false });
+
+  if (error){
+    listMsg.className = 'msg error';
+    listMsg.textContent = 'Không tải được danh sách: ' + error.message;
+    return;
+  }
+  listMsg.className = 'msg';
+  listMsg.textContent = '';
+  usersData = data || [];
+
+  // Dropdown lọc theo vai trò — chỉ các vai trò đang có trong danh sách.
+  const sel = document.getElementById('uFilterRole');
+  const cur = sel.value;
+  const roles = [...new Set(usersData.map(r => r.role).filter(Boolean))]
+    .sort((a, b) => (ROLE_LABELS[a] || a).localeCompare(ROLE_LABELS[b] || b, 'vi'));
+  sel.innerHTML = '<option value="">Vai trò: tất cả</option>' +
+    roles.map(r => `<option value="${r}"${r === cur ? ' selected' : ''}>${ROLE_LABELS[r] || r}</option>`).join('');
+
+  renderUsers();
+}
+
+function userSortVal(row, k){
+  if (k === 'id') return (row.username || row.email || '').toLowerCase();
+  if (k === 'full_name') return (row.full_name || '').toLowerCase();
+  if (k === 'role') return (ROLE_LABELS[row.role] || row.role || '').toLowerCase();
+  if (k === 'created_at') return row.created_at || '';
+  return '';
+}
+
+function renderUsers(){
+  const table = document.getElementById('userTable');
+  const tbody = document.getElementById('userTbody');
+  const empty = document.getElementById('userEmpty');
+
+  let rows = usersData.slice();
+  if (uQ) rows = rows.filter(r =>
+    ((r.username || '') + ' ' + (r.email || '') + ' ' + (r.full_name || '') + ' ' + (ROLE_LABELS[r.role] || r.role || ''))
+      .toLowerCase().includes(uQ));
+  if (uRole) rows = rows.filter(r => r.role === uRole);
+  rows.sort((a, b) => {
+    const va = userSortVal(a, uSort.k), vb = userSortVal(b, uSort.k);
+    return String(va).localeCompare(String(vb), 'vi', { numeric: true }) * uSort.dir;
+  });
+
+  document.querySelectorAll('#userTable thead th[data-k]').forEach(th =>
+    th.setAttribute('data-dir', th.dataset.k === uSort.k ? (uSort.dir === 1 ? 'asc' : 'desc') : ''));
+
+  document.getElementById('uCount').textContent = usersData.length
+    ? (rows.length === usersData.length ? `${rows.length} tài khoản` : `${rows.length} / ${usersData.length} tài khoản`)
+    : '';
+
+  if (!rows.length){
+    table.style.display = 'none';
+    empty.style.display = 'block';
+    empty.textContent = usersData.length ? 'Không có tài khoản nào khớp bộ lọc.' : 'Chưa có tài khoản nào được gán vai trò.';
+    return;
+  }
+  empty.style.display = 'none';
+  table.style.display = 'table';
+  tbody.innerHTML = '';
+  rows.forEach(row => tbody.appendChild(buildUserRow(row)));
+}
+
+function buildUserRow(row){
+  {
+    const tr = document.createElement('tr');
+    const createdAt = row.created_at ? new Date(row.created_at).toLocaleString('vi-VN', { hour12: false }) : '';
+    const idLabel = row.username ? row.username : row.email;
+    tr.innerHTML = `
+      <td>${idLabel}</td>
+      <td>${row.full_name || '<span class="muted">—</span>'}</td>
+      <td></td>
+      <td></td>
+      <td class="muted">${createdAt}</td>
+      <td></td>
+    `;
+    const roleTd = tr.children[2];
+    const sel = document.createElement('select');
+    fillRoleSelect(sel, row.role);
+    roleTd.appendChild(sel);
+
+    const bpTd = tr.children[3];
+    const bpChecks = document.createElement('div');
+    bpChecks.className = 'bp-check-group';
+    fillBoPhanChecks(bpChecks, row.bo_phan_phu_trach || []);
+    bpChecks.style.display = row.role === 'quan_ly_bo_phan' ? '' : 'none';
+    bpTd.appendChild(bpChecks);
+    const bpNote = document.createElement('span');
+    bpNote.className = 'muted';
+    bpNote.textContent = '—';
+    bpNote.style.display = row.role === 'quan_ly_bo_phan' ? 'none' : '';
+    bpTd.appendChild(bpNote);
+
+    const actionTd = tr.children[5];
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'role-save';
+    saveBtn.textContent = 'Lưu';
+    saveBtn.disabled = true;
+    function syncChanged(){
+      bpChecks.style.display = sel.value === 'quan_ly_bo_phan' ? '' : 'none';
+      bpNote.style.display = sel.value === 'quan_ly_bo_phan' ? 'none' : '';
+      const roleChanged = sel.value !== row.role;
+      const nowChecked = getBoPhanChecked(bpChecks);
+      const before = row.bo_phan_phu_trach || [];
+      const bpChanged = sel.value === 'quan_ly_bo_phan' && nowChecked.join(',') !== before.join(',');
+      saveBtn.disabled = !(roleChanged || bpChanged);
+    }
+    sel.addEventListener('change', syncChanged);
+    bpChecks.addEventListener('change', syncChanged);
+    saveBtn.addEventListener('click', async () => {
+      const chosenBp = getBoPhanChecked(bpChecks);
+      if (sel.value === 'quan_ly_bo_phan' && chosenBp.length === 0) {
+        alert('Vai trò "Quản lý bộ phận" cần chọn ít nhất 1 công đoạn phụ trách');
+        return;
+      }
+      saveBtn.disabled = true;
+      saveBtn.textContent = '...';
+      const { error: updErr } = await sb
+        .from('user_roles')
+        .update({
+          role: sel.value,
+          bo_phan_phu_trach: sel.value === 'quan_ly_bo_phan' ? chosenBp : null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', row.user_id);
+      if (updErr){
+        alert('Lỗi lưu vai trò: ' + updErr.message);
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Lưu';
+      } else {
+        row.role = sel.value;
+        row.bo_phan_phu_trach = sel.value === 'quan_ly_bo_phan' ? chosenBp : null;
+        saveBtn.textContent = 'Đã lưu';
+        setTimeout(() => { saveBtn.textContent = 'Lưu'; saveBtn.disabled = true; }, 1200);
+      }
+    });
+    actionTd.appendChild(saveBtn);
+
+    const resetBtn = document.createElement('button');
+    resetBtn.className = 'reset-pw-btn';
+    resetBtn.textContent = 'Đặt lại MK';
+    resetBtn.addEventListener('click', () => openResetPwModal(row.user_id, idLabel));
+    actionTd.appendChild(resetBtn);
+
+    return tr;
+  }
+}
+
+async function handleCreate(e){
+  e.preventDefault();
+  const msg = document.getElementById('createMsg');
+  const btn = document.getElementById('createBtn');
+  btn.disabled = true;
+  msg.className = 'msg info';
+  msg.textContent = 'Đang tạo tài khoản...';
+
+  const username = document.getElementById('cUsername').value.trim();
+  const email = document.getElementById('cEmail').value.trim();
+  const password = document.getElementById('cPassword').value;
+  const full_name = document.getElementById('cFullName').value.trim() || null;
+  const role = document.getElementById('cRole').value;
+  const bo_phan_phu_trach = getBoPhanChecked(document.getElementById('cBoPhan'));
+
+  if (role === 'quan_ly_bo_phan' && bo_phan_phu_trach.length === 0){
+    msg.className = 'msg error';
+    msg.textContent = 'Vai trò "Quản lý bộ phận" cần chọn ít nhất 1 công đoạn phụ trách.';
+    btn.disabled = false;
+    return;
+  }
+  if (!username && !email){
+    msg.className = 'msg error';
+    msg.textContent = 'Cần điền mã nhân viên hoặc email.';
+    btn.disabled = false;
+    return;
+  }
+
+  try {
+    const resp = await fetch(SUPABASE_URL + '/functions/v1/admin-create-user', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + currentSession.access_token,
+        'apikey': SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ username: username || undefined, email: email || undefined, password, full_name, role, bo_phan_phu_trach: bo_phan_phu_trach.length ? bo_phan_phu_trach : undefined }),
+    });
+    const result = await resp.json();
+    if (!resp.ok){
+      throw new Error(result.error || ('Lỗi HTTP ' + resp.status));
+    }
+    const who = result.username ? ('mã NV ' + result.username) : result.email;
+    toast('Đã tạo tài khoản ' + who + ' (' + (ROLE_LABELS[result.role] || result.role) + ')');
+    closeCreateModal();
+    await loadUsers();
+  } catch (err){
+    msg.className = 'msg error';
+    msg.textContent = 'Lỗi: ' + err.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+let resetPwTargetId = null;
+function openResetPwModal(userId, label){
+  resetPwTargetId = userId;
+  document.getElementById('resetPwWho').textContent = label;
+  document.getElementById('resetPwNew').value = '';
+  const msg = document.getElementById('resetPwMsg');
+  msg.className = 'msg'; msg.textContent = '';
+  document.getElementById('resetPwMask').classList.add('open');
+}
+function closeResetPwModal(){ document.getElementById('resetPwMask').classList.remove('open'); }
+
+async function submitResetPw(){
+  const newPassword = document.getElementById('resetPwNew').value;
+  const msg = document.getElementById('resetPwMsg');
+  const btn = document.getElementById('resetPwSubmit');
+  if (!newPassword || newPassword.length < 6){
+    msg.className = 'msg error'; msg.textContent = 'Mật khẩu mới tối thiểu 6 ký tự.';
+    return;
+  }
+  btn.disabled = true;
+  try {
+    const resp = await fetch(SUPABASE_URL + '/functions/v1/admin-reset-password', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + currentSession.access_token,
+        'apikey': SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ user_id: resetPwTargetId, new_password: newPassword }),
+    });
+    const result = await resp.json();
+    if (!resp.ok) throw new Error(result.error || ('Lỗi HTTP ' + resp.status));
+    msg.className = 'msg ok'; msg.textContent = '✓ Đã đặt lại mật khẩu.';
+    setTimeout(closeResetPwModal, 1200);
+  } catch (err){
+    msg.className = 'msg error'; msg.textContent = 'Lỗi: ' + err.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function main(){
+  currentSession = await MesAuth.requireAuth();
+
+  const gate = document.getElementById('gate');
+  const { data: myRole, error } = await sb
+    .from('user_roles')
+    .select('role')
+    .eq('user_id', currentSession.user.id)
+    .maybeSingle();
+
+  if (error){
+    gate.innerHTML = '<div class="msg error" style="display:block">Không kiểm tra được quyền: ' + error.message + '</div>';
+    return;
+  }
+  if (!myRole || myRole.role !== 'admin'){
+    gate.innerHTML = '<div class="msg error" style="display:block">Bạn không có quyền admin để vào trang này. Liên hệ quản trị viên hệ thống nếu cần quyền truy cập.</div>';
+    return;
+  }
+
+  document.getElementById('adminArea').style.display = 'block';
+  fillRoleSelect(document.getElementById('cRole'), '');
+  fillBoPhanChecks(document.getElementById('cBoPhan'), []);
+  document.getElementById('cRole').addEventListener('change', (e) => {
+    document.getElementById('cBoPhanWrap').style.display = e.target.value === 'quan_ly_bo_phan' ? '' : 'none';
+  });
+  document.getElementById('createForm').addEventListener('submit', handleCreate);
+
+  // Modal "Tạo tài khoản mới"
+  document.getElementById('uAdd').addEventListener('click', openCreateModal);
+  document.getElementById('createClose').addEventListener('click', closeCreateModal);
+  document.getElementById('createCancel').addEventListener('click', closeCreateModal);
+  document.getElementById('createMask').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('createMask')) closeCreateModal();
+  });
+
+  // Lọc + sắp xếp danh sách
+  document.getElementById('uSearch').addEventListener('input', (e) => { uQ = e.target.value.trim().toLowerCase(); renderUsers(); });
+  document.getElementById('uFilterRole').addEventListener('change', (e) => { uRole = e.target.value; renderUsers(); });
+  document.getElementById('uClear').addEventListener('click', () => {
+    uQ = ''; uRole = '';
+    document.getElementById('uSearch').value = '';
+    document.getElementById('uFilterRole').value = '';
+    renderUsers();
+  });
+  document.querySelector('#userTable thead').addEventListener('click', (e) => {
+    const th = e.target.closest('th[data-k]'); if (!th) return;
+    const k = th.dataset.k;
+    if (uSort.k === k) uSort.dir *= -1; else { uSort.k = k; uSort.dir = 1; }
+    renderUsers();
+  });
+
+  document.getElementById('resetPwCancel').addEventListener('click', closeResetPwModal);
+  document.getElementById('resetPwSubmit').addEventListener('click', submitResetPw);
+  document.getElementById('resetPwMask').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('resetPwMask')) closeResetPwModal();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (document.getElementById('createMask').classList.contains('open')) closeCreateModal();
+    if (document.getElementById('resetPwMask').classList.contains('open')) closeResetPwModal();
+  });
+  await loadUsers();
+}
+
+function startHeaderClock(){
+  function tick(){
+    const d = new Date();
+    document.getElementById('hdrClockDate').textContent = d.toLocaleDateString('vi-VN');
+    document.getElementById('hdrClockTime').textContent = d.toLocaleTimeString('vi-VN', { hour12: false });
+  }
+  tick();
+  setInterval(tick, 1000);
+}
+startHeaderClock();
+
+main();
+</script>
+</body>
+</html>

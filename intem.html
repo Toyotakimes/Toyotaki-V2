@@ -1,0 +1,1335 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>In Tem Đúc — TOYOTAKI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet"></noscript>
+<!--
+  intem.html — bản web tĩnh (Supabase) thay Web App Google Apps Script
+  "Intem QR" (D:\Project\MES\Intem QR\Code.gs + Index.html). Đọc công khai,
+  GHI (in tem mới/lưu sửa/xoá) bắt buộc đăng nhập Supabase Auth.
+
+  CẬP NHẬT 2026-08-14 (theo yêu cầu tối ưu hoá):
+  1) Tách 2 tab riêng biệt: "In Tem" (tạo tem mới) và "Tra cứu Tem" (tìm tem
+     đã in để xem/sửa/in lại/xoá) — trước đây gộp chung 1 form.
+  2) Tra cứu tem: ngoài gõ tay Tag No, thêm quét QR trực tiếp bằng camera
+     (jsQR + getUserMedia, cùng cách chuyencongdoan.html đã dùng) — tự tra
+     cứu ngay khi đọc được mã, không cần gõ tay.
+  3) "Nguyên liệu" tự điền theo master_products.nguyen_lieu khi chọn mã SP
+     (cột mới, quản lý qua quan-ly-danh-muc.html tab Sản phẩm) — vẫn sửa tay
+     được sau khi tự điền, không khoá cứng.
+  4) Chủng loại "Sản phẩm đang phát triển" in tem nền đen chữ trắng (trước
+     luôn nền trắng chữ đen bất kể chủng loại). Tag No tự phân biệt qua tiền
+     tố D-TKD (đang phát triển) / TKD (hàng loạt) — dùng lại để suy ra chủng
+     loại khi tra cứu/in lại tem cũ (KHÔNG có cột loai_sp riêng trong
+     duc_tem, xem migration_phase4_step2_intem.sql).
+  - Thư viện tạo mã QR (qrcode-generator) tải từ CDN, giữ nguyên 100% logic
+    vẽ SVG (buildQrRects/buildLabelSvg) so với bản gốc.
+  - Nhận prefill qua query string (?maSP=..&tenSP=..&mayDuc=..&nguoiTT=..&soKhuon=..)
+    khi mở từ nút "🖨" trên duc-dashboard.html — đổ vào tab "In Tem".
+-->
+<style>
+:root{--bg-page:#EEF1F5;--bg-panel:#FFFFFF;--bg-sunken:#F5F7FA;--bg-header:#1E293B;--border:#D9DFE5;--border-strong:#B8C1CC;--text:#0F172A;--text-muted:#64748B;--text-dim:#94A3B8;--accent:#0F5FA5;--accent-hover:#0A4681;--run-fg:#047857;--run-bg:#ECFDF5;--warn-fg:#B45309;--warn-bg:#FFFBEB;--alarm-fg:#B91C1C;--alarm-bg:#FEF2F2;--shadow-sm:0 1px 2px rgba(15,23,42,0.04);--shadow-md:0 4px 12px rgba(15,23,42,0.08);--shadow-lg:0 12px 32px rgba(15,23,42,0.16);}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background:var(--bg-page);color:var(--text);font-size:13px;line-height:1.35;-webkit-font-smoothing:antialiased}
+body{min-height:100vh;display:flex;flex-direction:column;
+  align-items:center;padding:6px 12px 40px}
+header{background:var(--bg-header);color:#F1F5F9;border-radius:8px;padding:6px 14px;display:flex;align-items:center;gap:14px;box-shadow:var(--shadow-sm);flex-wrap:wrap;width:100%;max-width:500px;margin-bottom:6px}
+.brand{display:flex;flex-direction:column;line-height:1.2}
+.brand .co{font-size:9px;letter-spacing:.08em;color:#94A3B8;text-transform:uppercase;font-weight:500}
+.brand .title{font-size:14px;font-weight:700;letter-spacing:-.01em;color:#FFF}
+.header-group{display:flex;align-items:center;gap:6px}
+.header-label{font-size:10px;color:#94A3B8;text-transform:uppercase;letter-spacing:.05em;font-weight:500}
+.header-select,.header-input{background:#334155;color:#F1F5F9;border:1px solid #475569;border-radius:5px;padding:4px 8px;font-family:inherit;font-size:12px;font-weight:500;cursor:pointer;outline:none}
+.header-select:hover{background:#3F5266}
+.header-clock{margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;padding:0 10px;line-height:1.15}
+.header-clock .date{font-size:10px;color:#94A3B8}
+.header-clock .time{font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;color:#FFF;letter-spacing:-.02em}
+.hdr{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  margin-bottom:16px;width:100%;max-width:500px}
+.hdr-left{display:flex;align-items:center;gap:10px}
+.hdr h1{font-size:16px;font-weight:700;color:var(--text);line-height:1.2}
+.hdr p{font-size:10px;color:var(--text-dim);margin-top:2px}
+.auth-info{font-size:11px;color:var(--text-muted)}
+.auth-info a{color:var(--accent);text-decoration:none;font-weight:600}
+.tabs-wrap{display:flex;gap:8px;width:100%;max-width:500px;margin-bottom:14px}
+.tab-btn{flex:1;padding:11px;border:1.5px solid var(--border);border-radius:10px;background:var(--bg-panel);
+  color:var(--text-muted);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+.tab-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.card{background:var(--bg-panel);border-radius:14px;border:1px solid var(--border);
+  box-shadow:var(--shadow-sm);
+  padding:24px 20px;width:100%;max-width:500px;margin-bottom:14px}
+.card-ttl{font-size:12px;font-weight:700;color:var(--accent);
+  text-transform:uppercase;letter-spacing:.5px;
+  margin-bottom:18px;padding-bottom:9px;
+  border-bottom:2px solid var(--border)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.fg{display:flex;flex-direction:column;gap:4px}
+.fg.full{grid-column:1/-1}
+label{font-size:11px;font-weight:700;color:var(--text-muted);
+  text-transform:uppercase;letter-spacing:.4px}
+.req::after{content:" *";color:var(--alarm-fg)}
+input,select,textarea{border:1.5px solid var(--border);border-radius:7px;
+  padding:8px 10px;font-size:13px;color:var(--text);
+  width:100%;transition:border-color .2s;font-family:inherit;background:var(--bg-panel)}
+input:focus,select:focus,textarea:focus{
+  outline:none;border-color:var(--accent);
+  box-shadow:0 0 0 3px rgba(15,95,165,.14)}
+input[disabled],select[disabled]{background:var(--bg-sunken);color:var(--text-dim)}
+textarea{resize:vertical;min-height:48px}
+.btns{display:flex;gap:10px;margin-top:20px;flex-wrap:wrap}
+.btn{flex:1;padding:12px;border:none;border-radius:9px;font-family:inherit;
+  font-size:13px;font-weight:700;cursor:pointer;transition:all .2s;min-width:120px}
+.btn-p{background:var(--accent);color:#fff}
+.btn-p:hover:not(:disabled){background:var(--accent-hover);transform:translateY(-1px)}
+.btn-p:disabled{opacity:.5;cursor:not-allowed}
+.btn-s{background:var(--bg-sunken);color:var(--text);border:1px solid var(--border)}
+.btn-s:hover{background:var(--border)}
+.btn-s:disabled{opacity:.5;cursor:not-allowed}
+.scan-btn{width:100%;padding:14px;border:none;border-radius:10px;font-family:inherit;
+  background:var(--accent);color:#fff;font-size:13px;font-weight:700;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:10px}
+.scan-btn:active{background:var(--accent-hover)}
+.scan-btn.rescan{background:var(--bg-panel);color:var(--accent);border:1.5px solid var(--accent);padding:10px;font-size:13px}
+.scan-video-wrap{margin-top:10px}
+.scan-video-wrap video{width:100%;border-radius:10px;background:#000}
+.qr-modal{position:fixed;inset:0;background:#000;z-index:9999;display:none;flex-direction:column}
+.qr-modal.show{display:flex}
+.qr-modal-hdr{display:flex;justify-content:space-between;align-items:center;
+  padding:12px 14px;background:rgba(0,0,0,.7);flex-shrink:0}
+.qr-modal-hdr span{color:#fff;font-size:13px;font-weight:700}
+.qr-modal-close{background:var(--alarm-fg);color:#fff;border:none;border-radius:8px;font-family:inherit;
+  padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer}
+#qrReaderDiv{position:relative;flex:1;overflow:hidden}
+#qrReaderDiv video{position:absolute!important;inset:0!important;
+  width:100%!important;height:100%!important;object-fit:cover!important}
+#msg{margin-top:12px;padding:11px 14px;border-radius:7px;
+  font-size:13px;display:none;width:100%;max-width:500px}
+.err{background:var(--alarm-bg);color:var(--alarm-fg);border:1px solid #F5B5B5;display:block!important}
+.ok{background:var(--run-bg);color:var(--run-fg);border:1px solid #A7E3C6;display:block!important}
+.wait{background:var(--warn-bg);color:var(--warn-fg);border:1px solid #F5DFB0;display:block!important}
+.loading-overlay{display:flex;align-items:center;justify-content:center;
+  padding:30px;color:var(--accent);font-size:13px;gap:10px;width:100%;max-width:500px}
+.spin{width:20px;height:20px;border:3px solid var(--border);
+  border-top-color:var(--accent);border-radius:50%;
+  animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.empty-hint{font-size:12px;color:var(--text-dim);text-align:center;padding:8px 4px 0}
+.chip-row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
+.chip-row:empty{display:none;margin:0}
+.chip-opt{padding:6px 11px;border:1.5px solid var(--border);border-radius:20px;font-size:12px;font-weight:700;background:var(--bg-panel);color:var(--text-muted);cursor:pointer;font-family:inherit}
+.chip-opt.sel{background:var(--accent);color:#fff;border-color:var(--accent)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="co">Toyotaki</div>
+    <div class="title">In Tem — Đúc</div>
+  </div>
+  <div class="header-clock">
+    <span class="date" id="clock-date">—</span>
+    <span class="time" id="clock-time">--:--:--</span>
+  </div>
+</header>
+
+<div id="loading" class="loading-overlay">
+  <div class="spin"></div> Đang tải dữ liệu...
+</div>
+
+<div id="mainWrap" style="display:none;width:100%;max-width:500px">
+  <div class="tabs-wrap">
+    <button type="button" class="tab-btn active" id="tabBtnPrint">🖨️ In Tem</button>
+    <button type="button" class="tab-btn" id="tabBtnSearch">🔎 Tra cứu Tem</button>
+    <button type="button" class="tab-btn" id="tabBtnKanban">📋 Chỉ thị SX</button>
+  </div>
+
+  <!-- ============ TAB: In Tem (tạo tem mới) ============ -->
+  <div id="panelPrint">
+    <div class="card">
+      <div class="card-ttl">Thông tin tem mới</div>
+      <div class="grid">
+        <div class="fg">
+          <label class="req" for="maSP">Mã sản phẩm</label>
+          <select id="maSP" onchange="onMaChange('')"></select>
+        </div>
+        <div class="fg">
+          <label for="tenSP">Tên sản phẩm</label>
+          <input id="tenSP" type="text" placeholder="Tự điền theo mã" disabled>
+        </div>
+        <div class="fg">
+          <label class="req" for="soLuong">Số lượng / thùng</label>
+          <input id="soLuong" type="number" placeholder="Pcs" min="1">
+        </div>
+        <div class="fg">
+          <label for="lotNo">Ngày sản xuất</label>
+          <input id="lotNo" type="date">
+        </div>
+        <div class="fg">
+          <label for="soKhuon">Số khuôn</label>
+          <div class="chip-row" id="soKhuon-chips"></div>
+          <input id="soKhuon" type="text" placeholder="Chọn mã SP trước để gợi ý khuôn">
+        </div>
+        <div class="fg">
+          <label for="nguyenLieu">Nguyên liệu</label>
+          <input id="nguyenLieu" type="text" placeholder="Tự điền theo mã SP" disabled>
+        </div>
+        <div class="fg">
+          <label class="req" for="mayDuc">Máy đúc</label>
+          <select id="mayDuc"></select>
+        </div>
+        <div class="fg">
+          <label class="req" for="nguoiTT">Người thao tác</label>
+          <select id="nguoiTT"></select>
+        </div>
+        <div class="fg full">
+          <label for="ghiChu">Ghi chú</label>
+          <textarea id="ghiChu" placeholder="VD: Đúc mẫu"></textarea>
+        </div>
+        <div class="fg full">
+          <label class="req" for="loaiSP">Chủng loại sản phẩm</label>
+          <select id="loaiSP">
+            <option value="hangloat" selected>Sản phẩm sản xuất hàng loạt</option>
+            <option value="phattrien">Sản phẩm đang phát triển (in tem nền đen)</option>
+          </select>
+        </div>
+      </div>
+      <div class="btns">
+        <button class="btn btn-s" onclick="clearAll()">🗑 Xóa</button>
+        <button class="btn btn-p" id="btnIn" onclick="inTem()">🖨 In Tem</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ TAB: Chỉ thị SX (Kanban) ============ -->
+  <div id="panelKanban" style="display:none">
+    <div class="card">
+      <div class="card-ttl">Tạo lô tem chỉ thị sản xuất (Kanban)</div>
+      <div class="grid">
+        <div class="fg">
+          <label class="req" for="k_mayDuc">Máy đúc</label>
+          <select id="k_mayDuc" onchange="onKanbanKhsx()"></select>
+        </div>
+        <div class="fg">
+          <label class="req" for="k_maSP">Mã sản phẩm</label>
+          <select id="k_maSP" onchange="onKanbanMaChange()"></select>
+        </div>
+        <div class="fg">
+          <label for="k_tenSP">Tên sản phẩm</label>
+          <input id="k_tenSP" type="text" placeholder="Tự điền theo mã" disabled>
+        </div>
+        <div class="fg">
+          <label for="k_nguyenLieu">Nguyên liệu</label>
+          <input id="k_nguyenLieu" type="text" placeholder="Tự điền theo mã SP" disabled>
+        </div>
+        <div class="fg">
+          <label for="k_soKhuon">Số khuôn</label>
+          <div class="chip-row" id="k_soKhuon-chips"></div>
+          <input id="k_soKhuon" type="text" placeholder="Chọn mã SP trước để gợi ý khuôn">
+        </div>
+        <div class="fg">
+          <label class="req" for="k_ngay">Ngày chỉ thị</label>
+          <input id="k_ngay" type="date" onchange="onKanbanKhsx()">
+        </div>
+        <div class="fg">
+          <label for="k_slChuan">Số lượng / thùng (theo danh mục)</label>
+          <input id="k_slChuan" type="text" placeholder="Chọn mã SP — tự lấy theo danh mục" disabled>
+        </div>
+        <div class="fg">
+          <label class="req" for="k_soThung">Số thùng</label>
+          <input id="k_soThung" type="number" placeholder="Số tem cần in" min="1" oninput="onKanbanRecalc()">
+        </div>
+        <div class="fg">
+          <label for="k_slThungCuoi">SL thùng cuối (nếu lẻ)</label>
+          <input id="k_slThungCuoi" type="number" placeholder="Bỏ trống nếu đều nhau" min="1">
+        </div>
+        <div class="fg full">
+          <div class="empty-hint" id="k_khsxHint" style="text-align:left;padding-top:2px"></div>
+        </div>
+      </div>
+      <div class="btns">
+        <button class="btn btn-s" type="button" onclick="clearKanban()">🗑 Xóa</button>
+        <button class="btn btn-p" id="k_btnTao" type="button" onclick="taoLoKanban()">📋 Tạo lô &amp; in</button>
+      </div>
+    </div>
+
+    <div class="card" id="k_batchCard" style="display:none">
+      <div class="card-ttl">Lô vừa tạo — <span id="k_batchLo"></span></div>
+      <div id="k_batchList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px"></div>
+      <div class="btns">
+        <button class="btn btn-p" type="button" onclick="printKanbanBatch()">🖨 In lại cả lô</button>
+      </div>
+      <div class="empty-hint" style="text-align:left;padding-top:8px">Tem chỉ thị ở trạng thái <b>Chờ sản xuất</b> — chỉ cộng vào sản lượng khi người thao tác quét QR ghi nhận tại màn hình "Ghi nhận thùng (Kanban)".</div>
+    </div>
+  </div>
+
+  <!-- ============ TAB: Tra cứu Tem ============ -->
+  <div id="panelSearch" style="display:none">
+    <div class="card">
+      <div class="card-ttl">Tra cứu theo Tag No</div>
+      <div class="fg">
+        <label for="searchTag">Tag No</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="searchTag" type="text" placeholder="Gõ Tag No hoặc dùng đầu đọc QR rời rồi Enter">
+          <button class="btn btn-s" type="button" style="flex:none;padding:8px 14px" onclick="findTem()">🔎 Tìm</button>
+        </div>
+      </div>
+      <button class="scan-btn" type="button" id="btnScanSearch">📷 Quét QR trên tem</button>
+      <input type="file" id="qrFileInput" accept="image/*" capture="environment" style="display:none">
+      <div class="empty-hint" id="scanEmptyHint">Hướng camera vào mã QR trên tem — hệ thống tự nhận diện và tra cứu, không cần bấm chụp.</div>
+    </div>
+
+    <div class="card" id="searchResultCard" style="display:none">
+      <div class="card-ttl">Thông tin tem tìm thấy</div>
+      <div class="grid">
+        <div class="fg">
+          <label class="req" for="s_maSP">Mã sản phẩm</label>
+          <select id="s_maSP" onchange="onMaChange('s_')"></select>
+        </div>
+        <div class="fg">
+          <label for="s_tenSP">Tên sản phẩm</label>
+          <input id="s_tenSP" type="text" disabled>
+        </div>
+        <div class="fg">
+          <label class="req" for="s_soLuong">Số lượng / thùng</label>
+          <input id="s_soLuong" type="number" placeholder="Pcs" min="1">
+        </div>
+        <div class="fg">
+          <label for="s_lotNo">Ngày sản xuất</label>
+          <input id="s_lotNo" type="date">
+        </div>
+        <div class="fg">
+          <label for="s_ngayGioGhiNhan">Ngày giờ SX thực tế</label>
+          <input id="s_ngayGioGhiNhan" type="datetime-local" step="60">
+        </div>
+        <div class="fg">
+          <label for="s_soKhuon">Số khuôn</label>
+          <div class="chip-row" id="s_soKhuon-chips"></div>
+          <input id="s_soKhuon" type="text" placeholder="Chọn mã SP trước để gợi ý khuôn">
+        </div>
+        <div class="fg">
+          <label for="s_nguyenLieu">Nguyên liệu</label>
+          <input id="s_nguyenLieu" type="text" disabled>
+        </div>
+        <div class="fg">
+          <label class="req" for="s_mayDuc">Máy đúc</label>
+          <select id="s_mayDuc"></select>
+        </div>
+        <div class="fg">
+          <label class="req" for="s_nguoiTT">Người thao tác</label>
+          <select id="s_nguoiTT"></select>
+        </div>
+        <div class="fg full">
+          <label for="s_ghiChu">Ghi chú</label>
+          <textarea id="s_ghiChu"></textarea>
+        </div>
+        <div class="fg full">
+          <label for="s_loaiSP">Chủng loại sản phẩm (áp dụng khi In lại)</label>
+          <select id="s_loaiSP">
+            <option value="hangloat">Sản phẩm sản xuất hàng loạt</option>
+            <option value="phattrien">Sản phẩm đang phát triển (in tem nền đen)</option>
+          </select>
+        </div>
+      </div>
+      <div class="btns">
+        <button class="btn btn-s" type="button" onclick="saveTemEdit()">💾 Lưu thay đổi</button>
+        <button class="btn btn-s" type="button" onclick="reprintTem()">🖨 In lại</button>
+        <button class="btn btn-s" type="button" onclick="deleteTem()">🗑 Xóa tem</button>
+        <button class="btn btn-s" type="button" id="btnHoanTacTach" style="display:none" onclick="hoanTacTachTem()">↩ Hoàn tác tách (gộp về tem cha)</button>
+      </div>
+    </div>
+
+    <div class="card" id="tachTemCard" style="display:none">
+      <div class="card-ttl">Tách tem (chia sọt)</div>
+      <div class="grid">
+        <div class="fg">
+          <label class="req" for="tachSoLuong">Số lượng tách ra tem con</label>
+          <input id="tachSoLuong" type="number" placeholder="Pcs" min="1">
+        </div>
+        <div class="fg">
+          <label for="tachLyDo">Lý do</label>
+          <input id="tachLyDo" type="text" placeholder="VD: chia 2 sọt, chuyển thiếu...">
+        </div>
+      </div>
+      <div class="btns">
+        <button class="btn btn-p" type="button" onclick="tachTem()">✂️ Tách tem & in tem con</button>
+      </div>
+      <div class="empty-hint" id="tachHistoryHint" style="text-align:left;padding-top:10px"></div>
+    </div>
+  </div>
+</div>
+
+<div id="msg"></div>
+<canvas id="scanCanvas" style="display:none"></canvas>
+
+<div class="qr-modal" id="qrModal">
+  <div class="qr-modal-hdr">
+    <span>📷 Đưa mã QR trên tem vào giữa khung hình</span>
+    <button type="button" class="qr-modal-close" id="btnCloseQrModal">✖ Đóng</button>
+  </div>
+  <div id="qrReaderDiv"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="shared/supabase-client.js"></script>
+<script src="shared/navbar.js"></script>
+<script>
+var masterData = [];   // [{ma, ten, nguyenLieu}]
+var masterMap = {};    // ma_sp -> {ten, nguyenLieu}
+var currentTagNo = "";
+var PREFILL = Object.fromEntries(new URLSearchParams(location.search));
+
+// =============================================================================
+// ĐỒNG HỒ HEADER (đồng bộ format với duc-dashboard.html — 24h, không AM/PM)
+// =============================================================================
+function pad(n){ return String(n).padStart(2,"0"); }
+function fmtTime(d){ return pad(d.getHours())+":"+pad(d.getMinutes())+":"+pad(d.getSeconds()); }
+function fmtDate(d){
+  var dayNames=["CN","T2","T3","T4","T5","T6","T7"];
+  return dayNames[d.getDay()]+", "+pad(d.getDate())+"/"+pad(d.getMonth()+1)+"/"+d.getFullYear();
+}
+function tickClock(){
+  var now = new Date();
+  document.getElementById("clock-time").textContent = fmtTime(now);
+  document.getElementById("clock-date").textContent = fmtDate(now);
+}
+tickClock();
+setInterval(tickClock, 1000);
+
+function getTodayString(){
+  var d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+}
+// ISO timestamptz <-> value cho <input type="datetime-local"> (giờ máy = giờ VN
+// tại hiện trường). "" nếu rỗng.
+function isoToDtLocal(iso){
+  if(!iso) return "";
+  var d = new Date(iso), p = function(n){ return String(n).padStart(2,"0"); };
+  return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())+"T"+p(d.getHours())+":"+p(d.getMinutes());
+}
+function dtLocalToISO(v){ return v ? new Date(v).toISOString() : null; }
+function g(id){ return document.getElementById(id).value.trim(); }
+function fmtInt(n){ return String(n == null ? '' : n).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
+/** Thứ Hai (ISO) của tuần chứa dateStr "YYYY-MM-DD" — khớp duc_khsx_tuan_plan.tuan_bat_dau */
+function mondayOf(dateStr){
+  var d = new Date(dateStr + 'T00:00:00');
+  var dow = (d.getDay() + 6) % 7; // 0 = Thứ Hai
+  d.setDate(d.getDate() - dow);
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+}
+
+// =============================================================================
+// TABS
+// =============================================================================
+function switchTab(tab){
+  var tabs = ['print', 'search', 'kanban'];
+  if (tabs.indexOf(tab) < 0) tab = 'print';
+  document.getElementById('tabBtnPrint').classList.toggle('active', tab === 'print');
+  document.getElementById('tabBtnSearch').classList.toggle('active', tab === 'search');
+  document.getElementById('tabBtnKanban').classList.toggle('active', tab === 'kanban');
+  document.getElementById('panelPrint').style.display = tab === 'print' ? 'block' : 'none';
+  document.getElementById('panelSearch').style.display = tab === 'search' ? 'block' : 'none';
+  document.getElementById('panelKanban').style.display = tab === 'kanban' ? 'block' : 'none';
+  if (tab !== 'search') { stopCamera(); }
+}
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('tabBtnPrint').addEventListener('click', () => switchTab('print'));
+  document.getElementById('tabBtnSearch').addEventListener('click', () => switchTab('search'));
+  document.getElementById('tabBtnKanban').addEventListener('click', () => switchTab('kanban'));
+});
+
+// =============================================================================
+// MASTER DATA
+// =============================================================================
+async function loadMaster(){
+  const [prod, may, nv] = await Promise.all([
+    sb.from('master_products').select('ma_sp,ten_sp,nguyen_lieu,so_khuon,sl_dong_goi_chuan').order('ma_sp'),
+    sb.from('master_machines').select('ma_may,kanban').or('bo_phan.eq.Đúc,bo_phan.is.null').order('ma_may'),
+    sb.from('master_employees').select('ten_nhan_vien').order('ten_nhan_vien'),
+  ]);
+  if (prod.error) throw new Error('Không tải được danh mục SP: ' + prod.error.message);
+  if (may.error) throw new Error('Không tải được danh mục máy: ' + may.error.message);
+  if (nv.error) throw new Error('Không tải được danh mục nhân sự: ' + nv.error.message);
+
+  masterData = (prod.data || []).map(r => ({ ma: r.ma_sp, ten: r.ten_sp || '', nguyenLieu: r.nguyen_lieu || '', soKhuon: r.so_khuon || '', slDongGoiChuan: r.sl_dong_goi_chuan || '' }));
+  masterMap = {};
+  masterData.forEach(m => { masterMap[m.ma] = m; });
+  buildSelects(masterData, (may.data||[]).map(r=>r.ma_may), (nv.data||[]).map(r=>r.ten_nhan_vien));
+  buildKanbanForm(masterData, may.data || []);
+}
+
+function fillOptions(sel, values, placeholder){
+  sel.innerHTML = '<option value="">' + placeholder + '</option>';
+  values.forEach(v => { sel.innerHTML += '<option value="' + v + '">' + v + '</option>'; });
+}
+
+function buildSelects(items, mays, nguois){
+  ['maSP', 's_maSP'].forEach(id => {
+    const sel = document.getElementById(id);
+    sel.innerHTML = '<option value="">-- Chọn mã SP --</option>';
+    items.forEach(item => { sel.innerHTML += '<option value="'+item.ma+'">'+item.ma+'</option>'; });
+  });
+  ['mayDuc', 's_mayDuc'].forEach(id => fillOptions(document.getElementById(id), mays, '-- Chọn máy --'));
+  ['nguoiTT', 's_nguoiTT'].forEach(id => fillOptions(document.getElementById(id), nguois, '-- Chọn người --'));
+}
+
+/** prefix '' = tab In Tem, 's_' = tab Tra cứu — tự điền tên SP + nguyên liệu
+    (khoá cứng, mỗi mã SP chỉ có đúng 1 nguyên liệu) + số khuôn (SP nào chạy
+    nhiều khuôn cùng lúc thì hiện chip cho người dùng chọn 1 trong số đó). */
+function onMaChange(prefix){
+  var ma = document.getElementById(prefix + "maSP").value;
+  var item = masterMap[ma];
+  document.getElementById(prefix + "tenSP").value = item ? item.ten : "";
+  document.getElementById(prefix + "nguyenLieu").value = item ? item.nguyenLieu : "";
+  populateSoKhuonChips(prefix, item ? item.soKhuon : "");
+}
+
+/** Danh sách khuôn của 1 mã SP lưu dạng "KPH #13-14, KPH #15-16" (text, xem
+    migration_phase_S7_sokhuon_real.sql) -- chỉ 1 khuôn thì điền thẳng vào ô,
+    nhiều khuôn thì hiện chip để chọn (ô vẫn sửa tay được nếu cần khuôn khác). */
+function populateSoKhuonChips(prefix, soKhuonRaw){
+  var chipsEl = document.getElementById(prefix + "soKhuon-chips");
+  var inputEl = document.getElementById(prefix + "soKhuon");
+  var molds = String(soKhuonRaw || "").split(",").map(function(s){ return s.trim(); }).filter(Boolean);
+
+  if (molds.length <= 1){
+    chipsEl.innerHTML = "";
+    inputEl.value = molds[0] || "";
+    return;
+  }
+
+  chipsEl.innerHTML = molds.map(function(mk){
+    return '<button type="button" class="chip-opt" data-mk="' + mk.replace(/"/g,'&quot;') + '">' + mk + '</button>';
+  }).join("");
+  [].forEach.call(chipsEl.querySelectorAll(".chip-opt"), function(btn){
+    btn.addEventListener("click", function(){
+      inputEl.value = btn.dataset.mk;
+      [].forEach.call(chipsEl.querySelectorAll(".chip-opt"), function(b){ b.classList.toggle("sel", b === btn); });
+    });
+  });
+  inputEl.value = molds[0];
+  chipsEl.querySelector(".chip-opt").classList.add("sel");
+}
+
+function applyPrefill(){
+  if (!PREFILL || !PREFILL.maSP) return;
+  document.getElementById("maSP").value = PREFILL.maSP;
+  onMaChange('');
+  if (!document.getElementById("tenSP").value && PREFILL.tenSP) {
+    document.getElementById("tenSP").value = PREFILL.tenSP;
+  }
+  if (PREFILL.soKhuon) document.getElementById("soKhuon").value = PREFILL.soKhuon;
+  if (PREFILL.mayDuc)  document.getElementById("mayDuc").value = PREFILL.mayDuc;
+  if (PREFILL.nguoiTT) document.getElementById("nguoiTT").value = PREFILL.nguoiTT;
+  var slEl = document.getElementById("soLuong");
+  if (slEl) slEl.focus();
+}
+
+// =============================================================================
+// TRA CỨU TEM
+// =============================================================================
+/** Suy ra chủng loại từ tiền tố Tag No — duc_tem không có cột loai_sp riêng
+    (xem migration_phase4_step2_intem.sql: D-TKD = đang phát triển, TKD = hàng loạt). */
+function loaiSpFromTagNo(tagNo){
+  return String(tagNo || '').toUpperCase().startsWith('D-TKD') ? 'phattrien' : 'hangloat';
+}
+
+function temRowToClient(r){
+  return {
+    tagNo: r.tag_no || "", tenSP: r.ten_sp || "", maSP: r.ma_sp || "",
+    soLuong: r.so_luong || "", lotNo: r.lot || "", soKhuon: r.so_khuon || "",
+    nguyenLieu: r.nguyen_lieu || "", mayDuc: r.may_duc_chi_thi || "",
+    ghiChu: r.ghi_chu || "", nguoiTT: r.nguoi_tt || "",
+    ngayGioGhiNhan: r.ngay_gio_ghi_nhan || "", ngayGioIn: r.ngay_gio_in || "",
+    loaiSP: loaiSpFromTagNo(r.tag_no),
+  };
+}
+
+function fillFormFromTem(t){
+  if(!t) return;
+  currentTagNo = t.tagNo || "";
+  document.getElementById("searchTag").value = currentTagNo;
+  document.getElementById("s_maSP").value = t.maSP || "";
+  document.getElementById("s_tenSP").value = t.tenSP || "";
+  document.getElementById("s_soLuong").value = t.soLuong || "";
+  document.getElementById("s_lotNo").value = t.lotNo ? String(t.lotNo).split("/").reverse().join("-") : getTodayString();
+  document.getElementById("s_ngayGioGhiNhan").value = isoToDtLocal(t.ngayGioGhiNhan || t.ngayGioIn);
+  document.getElementById("s_soKhuon").value = t.soKhuon || "";
+  document.getElementById("s_nguyenLieu").value = t.nguyenLieu || "";
+  document.getElementById("s_mayDuc").value = t.mayDuc || "";
+  document.getElementById("s_nguoiTT").value = t.nguoiTT || "";
+  document.getElementById("s_ghiChu").value = t.ghiChu || "";
+  document.getElementById("s_loaiSP").value = t.loaiSP || "hangloat";
+  document.getElementById("searchResultCard").style.display = "block";
+  document.getElementById("tachTemCard").style.display = "block";
+}
+
+async function findTem(){
+  var tagNo = g("searchTag");
+  if(!tagNo) return err("Nhập Tag No để tra cứu");
+  showMsg("⏳ Đang tra cứu tem...","wait");
+  const { data, error } = await sb.from('duc_tem').select('*').ilike('tag_no', tagNo);
+  if (error) return err("Lỗi tra cứu: " + error.message);
+  if (!data || !data.length) return err("Không tìm thấy tem");
+  fillFormFromTem(temRowToClient(data[0]));
+
+  const realTagNo = data[0].tag_no;
+  const { data: children } = await sb.from('duc_tem_tach').select('tag_no_con,so_luong_con,thoi_diem').eq('tag_no_cha', realTagNo).order('thoi_diem');
+  var histEl = document.getElementById("tachHistoryHint");
+  histEl.textContent = (children && children.length)
+    ? "Đã tách: " + children.map(c => c.tag_no_con + " (" + c.so_luong_con + ")").join(", ")
+    : "";
+
+  const { data: parentTach } = await sb.from('duc_tem_tach').select('tag_no_cha,so_luong_con').eq('tag_no_con', realTagNo).maybeSingle();
+  document.getElementById("btnHoanTacTach").style.display = parentTach ? "inline-block" : "none";
+  document.getElementById("btnHoanTacTach").title = parentTach
+    ? "Xoá tem này, cộng trả lại " + parentTach.so_luong_con + " pcs về tem cha " + parentTach.tag_no_cha
+    : "";
+
+  showMsg("✅ Đã tìm thấy tem " + data[0].tag_no, "ok", 3000);
+}
+
+async function requireLoginOrRedirect(){
+  const session = await MesAuth.getSession();
+  if (!session){
+    err("Cần đăng nhập trước khi thao tác. Đang chuyển sang trang đăng nhập…");
+    setTimeout(() => { window.location.href = 'shared/login.html?returnTo=' + encodeURIComponent(window.location.href); }, 1200);
+    return false;
+  }
+  return true;
+}
+
+async function saveTemEdit(){
+  if(!currentTagNo) return err("Tìm tem trước khi sửa");
+  if (!(await requireLoginOrRedirect())) return;
+  var ma=g("s_maSP"),sl=g("s_soLuong"),may=g("s_mayDuc"),nguoi=g("s_nguoiTT");
+  if(!ma) return err("Chọn Mã sản phẩm");
+  if(!sl||isNaN(sl)||+sl<=0) return err("Số lượng phải > 0");
+  if(!may) return err("Chọn Máy đúc");
+  if(!nguoi) return err("Chọn Người thao tác");
+
+  var ngayGio = g("s_ngayGioGhiNhan");
+  if (ngayGio && new Date(ngayGio).getTime() > Date.now() + 60000)
+    return err("Ngày giờ SX thực tế không được ở tương lai");
+  var patch = {
+    ten_sp: g("s_tenSP"), ma_sp: ma,
+    so_luong: Number(sl), so_luong_tt: Number(sl),
+    lot: g("s_lotNo"),
+    so_khuon: g("s_soKhuon"), so_khuon_tt: g("s_soKhuon"),
+    nguyen_lieu: g("s_nguyenLieu"),
+    may_duc_chi_thi: may, may_tt: may,
+    ghi_chu: g("s_ghiChu"), nguoi_tt: nguoi,
+    ngay_gio_ghi_nhan: dtLocalToISO(ngayGio),
+  };
+  showMsg("⏳ Đang lưu thay đổi...","wait");
+  const { error } = await sb.from('duc_tem').update(patch).ilike('tag_no', currentTagNo);
+  if (error) return err("Lỗi lưu: " + error.message);
+  showMsg("✅ Đã lưu thay đổi cho tem " + currentTagNo, "ok", 3000);
+}
+
+async function tachTem(){
+  if(!currentTagNo) return err("Tìm tem trước khi tách");
+  if (!(await requireLoginOrRedirect())) return;
+  var sl = g("tachSoLuong"), lyDo = g("tachLyDo");
+  if(!sl||isNaN(sl)||+sl<=0) return err("Số lượng tách phải > 0");
+  var nguoi = g("s_nguoiTT") || (await MesAuth.getSession())?.user?.email || "";
+
+  showMsg("⏳ Đang tách tem...","wait");
+  const { data: tagCon, error } = await sb.rpc('duc_tach_tem', {
+    p_tag_no_cha: currentTagNo, p_so_luong_tach: Number(sl), p_ly_do: lyDo, p_nguoi: nguoi,
+  });
+  if (error) return err("Lỗi tách tem: " + error.message);
+
+  document.getElementById("tachSoLuong").value = "";
+  document.getElementById("tachLyDo").value = "";
+  showMsg("✅ Đã tách tem con " + tagCon + " — đang mở cửa sổ in...", "ok", 5000);
+
+  const { data: conData } = await sb.from('duc_tem').select('*').eq('tag_no', tagCon);
+  if (conData && conData[0]){
+    var r = conData[0];
+    var ngayISO = String(r.ngay || "");
+    var parts = ngayISO.split("-");
+    var ngayQR = parts.length === 3 ? (parts[0]+"/"+parts[1]+"/"+parts[2]) : ngayISO;
+    var ngayHienThi = parts.length === 3 ? (parts[2]+"/"+parts[1]+"/"+parts[0]) : ngayISO;
+    var qr = [r.tag_no, r.ten_sp, r.ma_sp, r.so_luong, ngayQR, r.lot || ngayHienThi, r.so_khuon, r.nguyen_lieu, r.may_duc_chi_thi].join(">\n");
+    openPrint({
+      ok: true, tagNo: r.tag_no, qr: qr, ngay: ngayHienThi, tenSP: r.ten_sp, maSP: r.ma_sp,
+      soLuong: r.so_luong, lotNo: r.lot || ngayHienThi, soKhuon: r.so_khuon || "", nguyenLieu: r.nguyen_lieu || "",
+      mayDuc: r.may_duc_chi_thi, nguoiTT: r.nguoi_tt || "", ghiChu: r.ghi_chu || "",
+      loaiSP: loaiSpFromTagNo(r.tag_no),
+    });
+  }
+  findTem();
+}
+
+async function reprintTem(){
+  if(!currentTagNo) return err("Tìm tem trước khi in lại");
+  showMsg("⏳ Đang chuẩn bị in lại...","wait");
+  const { data, error } = await sb.from('duc_tem').select('*').ilike('tag_no', currentTagNo);
+  if (error) return err("Lỗi in lại: " + error.message);
+  if (!data || !data.length) return err("Không tìm thấy tem");
+  var r = data[0];
+
+  var ngayISO = String(r.ngay || "");
+  var parts = ngayISO.split("-");
+  var ngayQR = parts.length === 3 ? (parts[0]+"/"+parts[1]+"/"+parts[2]) : ngayISO;
+  var ngayHienThi = parts.length === 3 ? (parts[2]+"/"+parts[1]+"/"+parts[0]) : ngayISO;
+  var lotNo = r.lot || ngayHienThi;
+  var qr = [r.tag_no, r.ten_sp, r.ma_sp, r.so_luong, ngayQR, lotNo, r.so_khuon, r.nguyen_lieu, r.may_duc_chi_thi].join(">\n");
+
+  var d = {
+    ok: true, tagNo: r.tag_no, qr: qr, ngay: ngayHienThi,
+    tenSP: r.ten_sp, maSP: r.ma_sp, soLuong: r.so_luong,
+    lotNo: lotNo, soKhuon: r.so_khuon || "", nguyenLieu: r.nguyen_lieu || "",
+    mayDuc: r.may_duc_chi_thi, nguoiTT: r.nguoi_tt || "", ghiChu: r.ghi_chu || "",
+    // Dùng giá trị đang hiển thị trên form (cho phép đổi kiểu in khi In lại)
+    // thay vì suy ra lại từ Tag No, để người dùng chủ động chọn nếu cần.
+    loaiSP: document.getElementById("s_loaiSP").value || loaiSpFromTagNo(r.tag_no),
+  };
+  showMsg("✅ Đang in lại tem " + r.tag_no, "ok", 3000);
+  openPrint(d);
+}
+
+async function deleteTem(){
+  if(!currentTagNo) return err("Tìm tem trước khi xóa");
+  if(!window.confirm("Xóa tem "+currentTagNo+" khỏi database?")) return;
+  if (!(await requireLoginOrRedirect())) return;
+  showMsg("⏳ Đang xóa tem...","wait");
+  const deletedTagNo = currentTagNo;
+  const { error } = await sb.from('duc_tem').delete().ilike('tag_no', currentTagNo);
+  if (error) return err("Lỗi xóa: " + error.message);
+  clearSearch();
+  showMsg("✅ Đã xóa tem " + deletedTagNo, "ok", 3000);
+}
+
+async function hoanTacTachTem(){
+  if(!currentTagNo) return err("Tìm tem trước khi hoàn tác");
+  if(!window.confirm("Xoá tem "+currentTagNo+" và cộng trả số lượng về tem cha?\nKhông thể hoàn tác lại thao tác này.")) return;
+  if (!(await requireLoginOrRedirect())) return;
+  showMsg("⏳ Đang hoàn tác tách tem...","wait");
+  const nguoi = g("s_nguoiTT") || (await MesAuth.getSession())?.user?.email || "";
+  const { data: tagCha, error } = await sb.rpc('duc_hoan_tac_tach_tem', { p_tag_no_con: currentTagNo, p_nguoi: nguoi });
+  if (error) return err("Lỗi hoàn tác: " + error.message);
+  showMsg("✅ Đã hoàn tác — cộng trả số lượng về tem cha " + tagCha, "ok", 4000);
+  clearSearch();
+}
+
+function clearSearch(){
+  currentTagNo = "";
+  document.getElementById("searchTag").value = "";
+  document.getElementById("searchResultCard").style.display = "none";
+  document.getElementById("tachTemCard").style.display = "none";
+  document.getElementById("btnHoanTacTach").style.display = "none";
+}
+
+// ─── Quét QR trực tiếp qua camera — dùng thư viện html5-qrcode (mebjas), tự
+// ưu tiên BarcodeDetector phần cứng khi trình duyệt hỗ trợ (Chrome Android),
+// tự xử lý lấy nét/độ phân giải/khung quét — đọc ổn định hơn hẳn vòng lặp
+// jsQR tự viết trước đây (camera hiện hình nhưng không giải mã được). Mở
+// toàn màn hình khi quét cho dễ căn mã QR. ──────────────────────────────────
+let html5QrCode = null;
+let scanningActive = false;
+
+// Dùng lại DUY NHẤT 1 instance Html5Qrcode cho mọi lần quét — tạo mới +
+// clear() mỗi lần (cách làm ban đầu) làm trình duyệt (đặc biệt Edge) tích
+// rác bộ nhớ camera/canvas dần dần, crash tab sau vài lần quét liên tiếp.
+function getScanner(){
+  if (!html5QrCode) html5QrCode = new Html5Qrcode("qrReaderDiv");
+  return html5QrCode;
+}
+
+async function openCameraForSearch(){
+  document.getElementById("msg").style.display = "none";
+  if (typeof Html5Qrcode !== "function"){
+    err("Lỗi tải thư viện đọc QR (html5-qrcode) — kiểm tra kết nối mạng rồi tải lại trang.");
+    return;
+  }
+  document.getElementById("qrModal").classList.add("show");
+  const scanner = getScanner();
+  scanningActive = true;
+  try {
+    await scanner.start(
+      { facingMode: "environment" },
+      { fps: 8, qrbox: { width: 260, height: 260 } },
+      onScanSuccessForSearch,
+      () => { /* chưa thấy mã trong frame này — bỏ qua, thử tiếp frame sau */ }
+    );
+  } catch(e){
+    scanningActive = false;
+    await closeQrModal();
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      showMsg("📷 Trình duyệt không hỗ trợ camera trực tiếp — mở chế độ chụp ảnh…", "wait");
+      document.getElementById("qrFileInput").click();
+      return;
+    }
+    err("Không mở được camera: " + e + ". Kiểm tra đã cho phép quyền Camera cho trang này chưa.");
+  }
+}
+
+async function closeQrModal(){
+  document.getElementById("qrModal").classList.remove("show");
+  scanningActive = false;
+  if (html5QrCode && html5QrCode.isScanning){
+    try { await html5QrCode.stop(); } catch(e){ /* đã dừng rồi hoặc chưa start xong — bỏ qua */ }
+  }
+}
+
+function stopCamera(){ closeQrModal(); }
+
+async function onScanSuccessForSearch(decodedText){
+  if (!scanningActive) return; // đã xử lý/đóng rồi — bỏ qua các lần callback bắn muộn
+  scanningActive = false;
+  showMsg("🔎 Đã đọc được mã: " + decodedText.slice(0, 50) + "…", "wait");
+  try {
+    await closeQrModal();
+    onQrDecodedForSearch(decodedText);
+  } catch(e){
+    err("Lỗi xử lý dữ liệu vừa quét: " + (e && e.message ? e.message : e));
+  }
+}
+
+/* Fallback chụp ảnh tĩnh — chỉ dùng khi trình duyệt không hỗ trợ getUserMedia. */
+function onFileChosenForSearch(evt){
+  showMsg("⏳ Đang xử lý ảnh vừa chụp…", "wait");
+  const file = evt.target.files && evt.target.files[0];
+  if (!file) { err("Không nhận được ảnh (có thể bạn đã huỷ chụp)."); return; }
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    try {
+      const canvas = document.getElementById("scanCanvas");
+      const ctx = canvas.getContext("2d");
+      const w = img.width, h = img.height;
+      canvas.width = w; canvas.height = h;
+      ctx.drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      const data = ctx.getImageData(0, 0, w, h);
+      const code = jsQR(data.data, data.width, data.height);
+      if (code && code.data) onQrDecodedForSearch(code.data);
+      else err("Không đọc được mã QR trong ảnh vừa chụp — chụp lại, đảm bảo mã QR rõ nét và nằm giữa khung ảnh.");
+    } catch(e){ err("Lỗi xử lý ảnh: " + e.message); }
+    evt.target.value = "";
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); err("Không đọc được ảnh vừa chụp. Vui lòng thử lại."); };
+  img.src = url;
+}
+
+function onQrDecodedForSearch(text){
+  const tagNo = String(text).split(">")[0].trim();
+  if (!tagNo){ err("Mã QR không đúng định dạng tem TOYOTAKI."); return; }
+  document.getElementById("searchTag").value = tagNo;
+  findTem();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById("btnScanSearch").addEventListener("click", openCameraForSearch);
+  document.getElementById("btnCloseQrModal").addEventListener("click", stopCamera);
+  document.getElementById("qrFileInput").addEventListener("change", onFileChosenForSearch);
+  document.getElementById("searchTag").addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    findTem();
+  });
+});
+
+// =============================================================================
+// CHỈ THỊ SX (KANBAN) — tạo & in trước lô tem theo KH ca
+// =============================================================================
+var lastKanbanBatch = null;      // mảng tems của lô vừa tạo (để in lại)
+var kanbanKhNgay = null;         // KH ngày tra được từ duc_khsx_tuan_plan (gợi ý)
+
+function buildKanbanForm(items, mayRows){
+  var selMay = document.getElementById('k_mayDuc');
+  var rows = (mayRows || []).slice().sort(function(a, b){
+    return (b.kanban ? 1 : 0) - (a.kanban ? 1 : 0)
+      || String(a.ma_may).localeCompare(String(b.ma_may), 'vi');
+  });
+  selMay.innerHTML = '<option value="">-- Chọn máy --</option>';
+  rows.forEach(function(r){
+    selMay.innerHTML += '<option value="' + r.ma_may + '">' + (r.kanban ? '★ ' : '') + r.ma_may + '</option>';
+  });
+  var selSp = document.getElementById('k_maSP');
+  selSp.innerHTML = '<option value="">-- Chọn mã SP --</option>';
+  items.forEach(function(m){ selSp.innerHTML += '<option value="' + m.ma + '">' + m.ma + '</option>'; });
+}
+
+function onKanbanMaChange(){
+  var ma = document.getElementById('k_maSP').value;
+  var item = masterMap[ma];
+  document.getElementById('k_tenSP').value = item ? item.ten : '';
+  document.getElementById('k_nguyenLieu').value = item ? item.nguyenLieu : '';
+  populateSoKhuonChips('k_', item ? item.soKhuon : '');
+  // Số lượng / thùng LẤY THEO danh mục (master_products.sl_dong_goi_chuan) —
+  // không nhập tay. Chưa khai thì cảnh báo, chặn tạo lô.
+  var slc = item && item.slDongGoiChuan ? Number(item.slDongGoiChuan) : 0;
+  var el = document.getElementById('k_slChuan');
+  el.value = slc > 0 ? fmtInt(slc) + ' pcs' : '';
+  el.placeholder = slc > 0 ? '' : '⚠ Mã SP chưa khai "SL đóng gói chuẩn" trong Quản lý danh mục';
+  onKanbanKhsx();
+}
+
+async function onKanbanKhsx(){
+  var ma = document.getElementById('k_maSP').value;
+  var may = document.getElementById('k_mayDuc').value;
+  var ngay = document.getElementById('k_ngay').value;
+  var hintEl = document.getElementById('k_khsxHint');
+  kanbanKhNgay = null;
+  if (!ma || !may || !ngay){ hintEl.textContent = ''; return; }
+  var mon = mondayOf(ngay);
+  var dowCol = ['cn', 't2', 't3', 't4', 't5', 't6', 't7'][new Date(ngay + 'T00:00:00').getDay()];
+  hintEl.textContent = '⏳ Đang tra KHSX tuần…';
+  var res = await sb.from('duc_khsx_tuan_plan')
+    .select('t2,t3,t4,t5,t6,t7,cn')
+    .eq('tuan_bat_dau', mon).eq('ma_may', may).eq('ma_sp', ma);
+  if (res.error){ hintEl.textContent = 'Không tra được KHSX: ' + res.error.message; return; }
+  var data = res.data || [];
+  if (!data.length){
+    hintEl.textContent = '⚠️ Chưa có KHSX tuần đã đăng ký cho ' + may + ' / ' + ma
+      + ' (tuần bắt đầu ' + mon + '). Nhập số thùng thủ công.';
+    onKanbanRecalc();
+    return;
+  }
+  var khNgay = data.reduce(function(s, r){ return s + (Number(r[dowCol]) || 0); }, 0);
+  kanbanKhNgay = khNgay;
+  var slThung = kanbanSlThung();
+  var goiY = slThung > 0 ? Math.ceil(khNgay / slThung) : 0;
+  hintEl.textContent = 'KH ngày ' + ngay.split('-').reverse().join('/') + ': ' + fmtInt(khNgay) + ' pcs'
+    + (goiY ? ('   →   gợi ý ' + goiY + ' thùng') : '');
+  if (goiY && !document.getElementById('k_soThung').value) document.getElementById('k_soThung').value = goiY;
+  onKanbanRecalc();
+}
+
+// Số lượng / thùng hiện hành = theo danh mục của mã SP đang chọn (không nhập tay).
+function kanbanSlThung(){
+  var item = masterMap[document.getElementById('k_maSP').value];
+  return item && item.slDongGoiChuan ? Number(item.slDongGoiChuan) || 0 : 0;
+}
+
+function onKanbanRecalc(){
+  var kh = kanbanKhNgay || 0;
+  var slThung = kanbanSlThung();
+  var soThung = Number(document.getElementById('k_soThung').value) || 0;
+  var el = document.getElementById('k_slThungCuoi');
+  if (kh > 0 && slThung > 0 && soThung > 0){
+    var last = kh - (soThung - 1) * slThung;
+    el.placeholder = (last > 0 && last !== slThung) ? ('Gợi ý: ' + last) : 'Bỏ trống nếu đều nhau';
+  } else {
+    el.placeholder = 'Bỏ trống nếu đều nhau';
+  }
+}
+
+function clearKanban(){
+  ['k_maSP', 'k_mayDuc'].forEach(function(i){ document.getElementById(i).value = ''; });
+  ['k_tenSP', 'k_nguyenLieu', 'k_soKhuon', 'k_slChuan', 'k_soThung', 'k_slThungCuoi']
+    .forEach(function(i){ document.getElementById(i).value = ''; });
+  document.getElementById('k_soKhuon-chips').innerHTML = '';
+  document.getElementById('k_khsxHint').textContent = '';
+  document.getElementById('k_batchCard').style.display = 'none';
+  document.getElementById('k_slThungCuoi').placeholder = 'Bỏ trống nếu đều nhau';
+  kanbanKhNgay = null;
+  document.getElementById('msg').style.display = 'none';
+}
+
+async function taoLoKanban(){
+  if (!(await requireLoginOrRedirect())) return;
+  var may = g('k_mayDuc'), ma = g('k_maSP'), ngay = g('k_ngay');
+  var soThung = g('k_soThung'), slCuoi = g('k_slThungCuoi');
+  var soKhuon = g('k_soKhuon'), nguyenLieu = g('k_nguyenLieu');
+  var slThung = kanbanSlThung();
+  if (!may) return err('Chọn Máy đúc');
+  if (!ma) return err('Chọn Mã sản phẩm');
+  if (!ngay) return err('Chọn Ngày chỉ thị');
+  if (slThung <= 0) return err('Mã SP "' + ma + '" chưa khai "SL đóng gói chuẩn" trong Quản lý danh mục — cập nhật trước');
+  if (!soThung || isNaN(soThung) || +soThung <= 0 || +soThung % 1 !== 0) return err('Số thùng phải là số nguyên > 0');
+  if (+soThung > 500) return err('Tối đa 500 tem / lô');
+  if (slCuoi && (isNaN(slCuoi) || +slCuoi <= 0)) return err('SL thùng cuối không hợp lệ');
+
+  var nguoi = '';
+  try { nguoi = (await MesAuth.getCurrentUserIdentity()) || ''; } catch (e) {}
+  if (!nguoi) { try { nguoi = (await MesAuth.getSession())?.user?.email || ''; } catch (e) {} }
+
+  var btn = document.getElementById('k_btnTao');
+  btn.disabled = true; btn.textContent = '⏳ Đang tạo lô…';
+  showMsg('⏳ Đang sinh ' + soThung + ' tem chỉ thị…', 'wait');
+  try {
+    var res = await sb.rpc('duc_tao_lo_kanban', {
+      p_ma_may: may, p_ma_sp: ma, p_ngay: ngay, p_ca: null,
+      p_so_thung: Number(soThung), p_sl_thung: slThung || null,
+      p_sl_thung_cuoi: slCuoi ? Number(slCuoi) : null,
+      p_so_khuon: soKhuon || null, p_nguyen_lieu: nguyenLieu || null, p_nguoi: nguoi,
+    });
+    btn.disabled = false; btn.textContent = '📋 Tạo lô & in';
+    if (res.error) return err('Lỗi server: ' + res.error.message);
+    var data = res.data;
+    if (!data || !data.ok) return err(data && data.error ? data.error : 'Tạo lô thất bại');
+    lastKanbanBatch = data.tems || [];
+    renderKanbanBatch(data.id_lo_chi_thi, lastKanbanBatch);
+    showMsg('✅ Đã tạo ' + data.so_tem + ' tem (lô ' + data.id_lo_chi_thi + ') — đang mở cửa sổ in…', 'ok', 6000);
+    printKanbanBatch();
+  } catch (e) {
+    btn.disabled = false; btn.textContent = '📋 Tạo lô & in';
+    err('Lỗi: ' + (e && e.message ? e.message : e));
+  }
+}
+
+function renderKanbanBatch(lo, tems){
+  document.getElementById('k_batchLo').textContent = lo + ' · ' + tems.length + ' tem';
+  document.getElementById('k_batchList').innerHTML = tems.map(function(t, i){
+    return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;'
+      + 'padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px">'
+      + '<span><b>' + svgEsc(t.tag_no) + '</b> · ' + fmtInt(t.so_luong) + ' pcs</span>'
+      + '<button class="btn btn-s" type="button" style="flex:none;padding:5px 10px;min-width:0" '
+      + 'onclick="printKanbanOne(' + i + ')">🖨 In lại</button>'
+      + '</div>';
+  }).join('');
+  document.getElementById('k_batchCard').style.display = 'block';
+}
+
+/** 1 phần tử tems (từ duc_tao_lo_kanban) -> object cho buildKanbanLabelSvg.
+    Chuỗi QR giữ đúng format hiện hành: tag_no>ten_sp>ma_sp>so_luong>YYYY/MM/DD>lot>
+    so_khuon>nguyen_lieu>may_duc_chi_thi ; lot = chuỗi ngày "YYYY-MM-DD" (khớp
+    duc_tao_lo_kanban: lot = p_ngay::text). */
+function kanbanTemToPrintData(t){
+  var ngayISO = String(t.ngay || '');
+  var p = ngayISO.split('-');
+  var ngayQR = p.length === 3 ? (p[0] + '/' + p[1] + '/' + p[2]) : ngayISO;
+  var ngayHienThi = p.length === 3 ? (p[2] + '/' + p[1] + '/' + p[0]) : ngayISO;
+  var qr = [t.tag_no, t.ten_sp, t.ma_sp, t.so_luong, ngayQR, ngayISO, t.so_khuon, t.nguyen_lieu, t.may_duc_chi_thi].join('>\n');
+  return {
+    ok: true, tagNo: t.tag_no, qr: qr, ngayChiThi: ngayHienThi,
+    tenSP: t.ten_sp, maSP: t.ma_sp, soLuong: t.so_luong,
+    soKhuon: t.so_khuon || '', nguyenLieu: t.nguyen_lieu || '',
+    mayDuc: t.may_duc_chi_thi,
+    loaiSP: loaiSpFromTagNo(t.tag_no),
+  };
+}
+
+function printKanbanOne(i){
+  if (!lastKanbanBatch || !lastKanbanBatch[i]) return;
+  openPrintMulti([kanbanTemToPrintData(lastKanbanBatch[i])]);
+}
+
+function printKanbanBatch(){
+  if (!lastKanbanBatch || !lastKanbanBatch.length){ err('Chưa có lô nào để in'); return; }
+  openPrintMulti(lastKanbanBatch.map(kanbanTemToPrintData));
+}
+
+// Tem chỉ thị Kanban — bố cục NGANG: thông tin bên trái, QR + tên công ty bên
+// phải. Không có "thùng X/Y", không có người thao tác. Vùng thiết kế 100×70
+// (tỉ lệ khớp ô lưới 8 tem / tờ A4 dọc).
+function buildKanbanLabelSvg(d){
+  var W = 100, H = 70;
+  var dark = d.loaiSP === 'phattrien';
+  var bg = dark ? '#000000' : '#ffffff';
+  var fg = dark ? '#ffffff' : '#000000';
+  var logoUri = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODIiIGhlaWdodD0iNzciIHZpZXdCb3g9IjAgMCA4MiA3NyIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZmlsbC1ydWxlPSJldmVub2RkIiBjbGlwLXJ1bGU9ImV2ZW5vZGQiIGQ9Ik0yMC42MTE5IDIwLjU3OTlWNTEuMTAzM0gyNS4yMTcxVjE2LjEyNDlIMFYwLjg2MDM1Mkg0NC4xMTI2VjMxLjMwMzhMNDcuNzc4NyAyNy42NDcyTDY1LjgwNjQgNTEuMTAzM0g3MS43NjkzTDUxLjE1MzYgMjQuMjgwM0w3NC42MjU0IDAuODYwMzUySDgyTDU3Ljk5NCAyNC44NDA1TDgwLjU2OSA1Ni4yOTE5SDYzLjIwMjlMNDcuMTk2MyAzNS42MjUzTDM4Ljg2MTMgNDMuOTUwMlY2LjA0ODlINS4yNTEzMlYxMC45MzY0SDMwLjQ2ODRWNTYuMjkxOUgxNS4zNjA1VjIwLjU3OTlIMjAuNjExOVoiIGZpbGw9IiNDQTY2MjciLz4KPC9zdmc+Cg==";
+  var rows = [
+    {lbl:"Mã SP",        val:d.maSP,       big:true},
+    {lbl:"Tên SP",       val:d.tenSP,      big:true},
+    {lbl:"SL / thùng",   val:(d.soLuong != null ? fmtInt(d.soLuong) + " pcs" : ""), big:true},
+    {lbl:"Máy đúc",      val:d.mayDuc},
+    {lbl:"Ngày chỉ thị", val:d.ngayChiThi},
+    {lbl:"Số khuôn",     val:d.soKhuon},
+    {lbl:"Nguyên liệu",  val:d.nguyenLieu},
+    {lbl:"Tag No",       val:d.tagNo}
+  ];
+  var divX = 60;            // vạch ngăn dọc info | QR
+  var rowStartY = 22, rowH = 5.5;
+
+  var s = '<svg viewBox="0 0 '+W+' '+H+'" width="'+W+'mm" height="'+H+'mm" xmlns="http://www.w3.org/2000/svg">';
+  s += '<rect x="0" y="0" width="'+W+'" height="'+H+'" fill="'+bg+'"/>';
+  s += '<image x="3" y="3" width="9.4" height="8.7" href="'+logoUri+'"/>';
+  s += '<text x="15" y="9.6" font-family="Arial,Helvetica,sans-serif" font-size="4.4" font-weight="bold" fill="'+fg+'">TEM CHỈ THỊ SẢN XUẤT'+(dark ? ' — PHÁT TRIỂN' : '')+'</text>';
+  s += '<line x1="3" y1="14" x2="'+(W-3)+'" y2="14" stroke="'+fg+'" stroke-width="0.35"/>';
+  s += '<line x1="'+divX+'" y1="15.5" x2="'+divX+'" y2="'+(H-3)+'" stroke="'+fg+'" stroke-width="0.35"/>';
+  rows.forEach(function(r, i){
+    var y = rowStartY + i*rowH;
+    var lblSize = r.big ? 3.0 : 2.7;
+    var valSize = r.big ? 4.4 : 3.4;
+    var vLen = String(r.val||"").length;
+    if (vLen > 18) valSize -= 0.6;
+    if (vLen > 28) valSize -= 0.6;
+    s += '<text x="5" y="'+y.toFixed(2)+'" font-family="Arial,Helvetica,sans-serif" font-size="'+lblSize+'" font-weight="bold" fill="'+fg+'">'+svgEsc(r.lbl)+'</text>';
+    s += '<text x="23" y="'+y.toFixed(2)+'" font-family="Arial,Helvetica,sans-serif" font-size="'+valSize+'" font-weight="bold" fill="'+fg+'">'+svgEsc(r.val)+'</text>';
+  });
+  var qrSize = 34, cx = divX + (W - divX)/2, qrX = cx - qrSize/2, qrY = 17;
+  if (dark){
+    s += '<rect x="'+(qrX-1.6)+'" y="'+(qrY-1.6)+'" width="'+(qrSize+3.2)+'" height="'+(qrSize+3.2)+'" fill="#ffffff"/>';
+  }
+  s += '<g transform="translate('+qrX.toFixed(2)+','+qrY+')">'+buildQrRects(d.qr, qrSize, '#ffffff', '#000000')+'</g>';
+  s += '<text x="'+cx.toFixed(2)+'" y="'+(qrY+qrSize+5.2)+'" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="2.5" font-weight="bold" fill="'+fg+'">CÔNG TY CỔ PHẦN</text>';
+  s += '<text x="'+cx.toFixed(2)+'" y="'+(qrY+qrSize+8.7)+'" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="2.5" font-weight="bold" fill="'+fg+'">CÔNG NGHIỆP TOYOTAKI</text>';
+  s += '</svg>';
+  return s;
+}
+
+// In gộp lô tem Kanban NGANG: 8 tem / 1 tờ A4 DỌC (lưới 2 cột × 4 hàng), viền
+// nét đứt để cắt. Ô 98×68.5mm giữ tỉ lệ tem 100:70. Quá 8 tem tự sang tờ mới.
+function openPrintMulti(dList){
+  if (!dList || !dList.length){ err('Không có tem để in'); return; }
+  var PER_PAGE = 8;
+  var cells = dList.map(function(d){
+    var dark = d.loaiSP === 'phattrien';
+    return '<div class="cell"' + (dark ? ' style="background:#000"' : '') + '>' + buildKanbanLabelSvg(d) + '</div>';
+  });
+  var pages = '';
+  for (var i = 0; i < cells.length; i += PER_PAGE){
+    pages += '<div class="pg">' + cells.slice(i, i + PER_PAGE).join('') + '</div>';
+  }
+  var nPages = Math.ceil(cells.length / PER_PAGE);
+  var css = [
+    "@page{size:A4 portrait;margin:6mm}",
+    "*{margin:0;padding:0;box-sizing:border-box}",
+    "body{font-family:Arial,Helvetica,sans-serif;background:#fff}",
+    ".pg{width:198mm;display:grid;grid-template-columns:repeat(2,98mm);grid-auto-rows:68.5mm;gap:2mm;align-content:start;page-break-after:always}",
+    ".pg:last-child{page-break-after:auto}",
+    ".cell{border:0.3mm dashed #999;overflow:hidden;background:#fff}",
+    ".cell svg{display:block;width:100%;height:100%}",
+    ".pbtn{position:fixed;bottom:14px;right:14px;background:#C87941;color:#fff;border:none;border-radius:8px;padding:9px 18px;font-size:13px;font-weight:bold;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.2);z-index:9}",
+    "@media print{.pbtn{display:none}}"
+  ].join("");
+  var popupHtml =
+    "<!DOCTYPE html><html lang=\"vi\"><head><meta charset=\"UTF-8\">"
+    + "<title>Lô tem Kanban (" + dList.length + " tem · " + nPages + " tờ A4)</title>"
+    + "<style>" + css + "</style></head><body>"
+    + pages
+    + '<button class="pbtn" onclick="window.print()">🖨 In ngay (' + dList.length + ' tem · ' + nPages + ' tờ)</button>'
+    + '<script>setTimeout(function(){window.print();},200);<\/script>'
+    + "</body></html>";
+  var w = window.open("", "_blank", "width=820,height=920,scrollbars=yes");
+  if (!w){ err("Trình duyệt chặn popup — cho phép popup rồi thử lại"); return; }
+  w.document.open(); w.document.write(popupHtml); w.document.close();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  var kn = document.getElementById('k_ngay');
+  if (kn && !kn.value) kn.value = getTodayString();
+});
+
+// =============================================================================
+// IN TEM (tạo tem mới)
+// =============================================================================
+async function inTem(){
+  if (!(await requireLoginOrRedirect())) return;
+  var ma=g("maSP"),sl=g("soLuong"),may=g("mayDuc"),nguoi=g("nguoiTT"),loai=g("loaiSP");
+  if(!ma)   return err("Chọn Mã sản phẩm");
+  if(!sl||isNaN(sl)||+sl<=0) return err("Số lượng phải > 0");
+  if(!may)  return err("Chọn Máy đúc");
+  if(!nguoi)return err("Chọn Người thao tác");
+  if(!loai) loai="hangloat";
+
+  setBtn(true);
+  showMsg("⏳ Đang sinh Tag No và ghi dữ liệu...","wait");
+
+  var now = new Date();
+  var pad2 = n => String(n).padStart(2,"0");
+  var ngayISO = now.getFullYear()+"-"+pad2(now.getMonth()+1)+"-"+pad2(now.getDate());
+  var ngay = pad2(now.getDate())+"/"+pad2(now.getMonth()+1)+"/"+now.getFullYear();
+  var ngayQR = now.getFullYear()+"/"+pad2(now.getMonth()+1)+"/"+pad2(now.getDate());
+  var lotNoInput = g("lotNo");
+  var lotNo = lotNoInput ? lotNoInput.split("-").reverse().join("/") : ngay;
+  var tenSP = g("tenSP"), soKhuon = g("soKhuon"), nguyenLieu = g("nguyenLieu"), ghiChu = g("ghiChu");
+
+  try {
+    const { data: tagNo, error } = await sb.rpc('duc_ghi_tem', {
+      p_loai_sp: loai, p_ten_sp: tenSP, p_ma_sp: ma, p_so_luong: Number(sl),
+      p_ngay: ngayISO, p_lot: lotNoInput || ngay, p_so_khuon: soKhuon,
+      p_nguyen_lieu: nguyenLieu, p_may_duc: may, p_ghi_chu: ghiChu,
+      p_ngay_gio_in: now.toISOString(), p_nguoi_tt: nguoi,
+    });
+    setBtn(false);
+    if (error) { err("Lỗi server: " + error.message); return; }
+
+    var qr = [tagNo, tenSP, ma, sl, ngayQR, lotNoInput || ngay, soKhuon, nguyenLieu, may].join(">\n");
+    var d = { tagNo: tagNo, qr: qr, ngay: ngay, tenSP: tenSP, maSP: ma, soLuong: sl,
+              lotNo: lotNoInput || ngay, soKhuon: soKhuon, nguyenLieu: nguyenLieu,
+              mayDuc: may, nguoiTT: nguoi, ghiChu: ghiChu, loaiSP: loai };
+    showMsg("✅ " + tagNo + " — đang mở cửa sổ in...", "ok", 5000);
+    openPrint(d);
+  } catch (e) {
+    setBtn(false);
+    err("Lỗi: " + e.message);
+  }
+}
+
+// =============================================================================
+// IN / VẼ TEM SVG
+// =============================================================================
+function openPrint(d){
+  var svg = buildLabelSvg(d);
+  var bg = d.loaiSP === 'phattrien' ? '#000' : '#fff';
+  var css=[
+    "@page{size:105mm 148mm;margin:0}",
+    "*{margin:0;padding:0;box-sizing:border-box}",
+    "html,body{width:105mm;height:148mm;background:"+bg+"}",
+    "svg{display:block;width:105mm;height:148mm}",
+    ".pbtn{position:fixed;bottom:14px;right:14px;background:#C87941;color:#fff;border:none;border-radius:8px;padding:9px 18px;font-size:13px;font-weight:bold;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.2)}",
+    "@media print{.pbtn{display:none}}"
+  ].join("");
+  var popupHtml =
+    "<!DOCTYPE html><html lang=\"vi\"><head><meta charset=\"UTF-8\">"
+    +"<title>Tem: "+d.tagNo+"</title>"
+    +"<style>"+css+"</style></head><body>"
+    +svg
+    +'<button class="pbtn" onclick="window.print()">🖨 In ngay</button>'
+    +'<script>setTimeout(function(){window.print();},150);<\/script>'
+    +"</body></html>";
+  var w=window.open("","_blank","width=430,height=720,scrollbars=yes");
+  if(!w){err("Trình duyệt chặn popup — vào Settings cho phép popup rồi thử lại");return;}
+  w.document.open(); w.document.write(popupHtml); w.document.close();
+}
+
+function buildQrRects(data, sizeMm, bgColor, fgColor){
+  var qr = qrcode(0, "M");
+  qr.addData(data);
+  qr.make();
+  var n = qr.getModuleCount();
+  var cell = sizeMm / n;
+  var out = '<rect x="0" y="0" width="'+sizeMm+'" height="'+sizeMm+'" fill="'+bgColor+'"/>';
+  for (var r=0; r<n; r++){
+    for (var c=0; c<n; c++){
+      if (qr.isDark(r,c)){
+        out += '<rect x="'+(c*cell).toFixed(3)+'" y="'+(r*cell).toFixed(3)+'" width="'+cell.toFixed(3)+'" height="'+cell.toFixed(3)+'" fill="'+fgColor+'"/>';
+      }
+    }
+  }
+  return out;
+}
+
+function svgEsc(s){
+  s = String(s==null?"":s);
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+function buildLabelSvg(d){
+  var W=72, H=100; // toạ độ thiết kế gốc của tem — giữ nguyên layout, chỉ scale khi in ra khổ A6
+  var PW=105, PH=148; // khổ giấy in thực tế — A6
+  var scale = Math.min(PW/W, PH/H);
+  var offX = (PW - W*scale)/2, offY = (PH - H*scale)/2;
+  // Sản phẩm đang phát triển -> tem nền đen chữ trắng (dễ phân biệt bằng mắt
+  // với tem hàng loạt trên cùng dây chuyền). Mã QR luôn giữ ô nền trắng
+  // riêng bên trong (buildQrRects) để đảm bảo máy quét đọc được bất kể nền
+  // tem là màu gì.
+  var dark = d.loaiSP === 'phattrien';
+  var bg = dark ? '#000000' : '#ffffff';
+  var fg = dark ? '#ffffff' : '#000000';
+  var logoUri = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODIiIGhlaWdodD0iNzciIHZpZXdCb3g9IjAgMCA4MiA3NyIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZmlsbC1ydWxlPSJldmVub2RkIiBjbGlwLXJ1bGU9ImV2ZW5vZGQiIGQ9Ik0yMC42MTE5IDIwLjU3OTlWNTEuMTAzM0gyNS4yMTcxVjE2LjEyNDlIMFYwLjg2MDM1Mkg0NC4xMTI2VjMxLjMwMzhMNDcuNzc4NyAyNy42NDcyTDY1LjgwNjQgNTEuMTAzM0g3MS43NjkzTDUxLjE1MzYgMjQuMjgwM0w3NC42MjU0IDAuODYwMzUySDgyTDU3Ljk5NCAyNC44NDA1TDgwLjU2OSA1Ni4yOTE5SDYzLjIwMjlMNDcuMTk2MyAzNS42MjUzTDM4Ljg2MTMgNDMuOTUwMlY2LjA0ODlINS4yNTEzMlYxMC45MzY0SDMwLjQ2ODRWNTYuMjkxOUgxNS4zNjA1VjIwLjU3OTlIMjAuNjExOVoiIGZpbGw9IiNDQTY2MjciLz4KPHBhdGggZD0iTTgyIDc2LjY4MDRINzkuODAzNFY2NC4zNTk3SDgyVjc2LjY4MDRaTTcyLjA2MDUgNzEuMzYyM0w3MC42MjE4IDcyLjg0NDdWNzYuNjg2MUg2OC40MTc1VjY0LjM1OTdINzAuNjIxOFY3MC4xMzlMNzEuODQyNiA2OC42NzM3TDc1LjU1NjkgNjQuMzU5N0g3OC4yMjIxTDczLjUwODggNjkuODE2OUw3OC40OTQgNzYuNjc2Nkg3NS44NzdMNzIuMDYwNSA3MS4zNjIzWk01OS4zMzI0IDcyLjA5NEg2My4wMUw2MS4xNzk5IDY2Ljk3OTdMNTkuMzMyNCA3Mi4wOTRaTTYzLjY0MDYgNzMuODIwM0g1OC43MjFMNTcuNjkxMiA3Ni42Nzg1SDU1LjQwMDFMNjAuMTk0NCA2NC4zNTc4SDYyLjE3M0w2Ni45NzY5IDc2LjY3ODVINjQuNjc2Mkw2My42NDA2IDczLjgyMDNaTTU1LjkyNjYgNjYuMDkxOEg1MS45NTU4Vjc2LjY4MDRINDkuNzY3VjY2LjA5MThINDUuODQ0NFY2NC4zNTk3SDU1LjkxNTFMNTUuOTI2NiA2Ni4wOTE4Wk00MS45OTMyIDcwLjE5OTlDNDEuOTkzMiA2OC44MzQ0IDQxLjcyNzcgNjcuNzg4OSA0MS4xOTY3IDY3LjA2MzZDNDAuNjY2NCA2Ni4zMzU3IDM5LjkxMDQgNjUuOTcxNyAzOC45MzQ2IDY1Ljk3MTdDMzguNTAwMSA2NS45NTQ1IDM4LjA2ODIgNjYuMDQ0NiAzNy42Nzc5IDY2LjIzMzlDMzcuMjg3NiA2Ni40MjMyIDM2Ljk1MTMgNjYuNzA1OCAzNi42OTk0IDY3LjA1NTlDMzYuMTYwNyA2Ny43ODI2IDM1Ljg4NjIgNjguODA3MSAzNS44NzYgNzAuMTI5NFY3MC44NDAyQzM1Ljg3NiA3Mi4xOTU2IDM2LjE0NzkgNzMuMjQxIDM2LjY5MTcgNzMuOTc2NUMzNi45NDQ3IDc0LjMzNDIgMzcuMjg0NiA3NC42MjMyIDM3LjY4MDMgNzQuODE3QzM4LjA3NTkgNzUuMDEwOCAzOC41MTQ1IDc1LjEwMzEgMzguOTU1OCA3NS4wODU1QzM5LjkzMzUgNzUuMDg1NSA0MC42OTE0IDc0LjcyNTQgNDEuMjEwMiA3NC4wMDMyQzQxLjcyOSA3My4yODEgNDEuOTk3IDcyLjIyNzMgNDEuOTk3IDcwLjg0MDJMNDEuOTkzMiA3MC4xOTk5Wk00NC4yMDEzIDcwLjg0MDJDNDQuMjI2MSA3MS45MzcyIDQ0LjAwNjIgNzMuMDI2MiA0My41NTcyIDc0LjAyOTlDNDMuMTY2NCA3NC44OTQyIDQyLjUyMzkgNzUuNjIzOSA0MS43MTE2IDc2LjEyNTlDNDAuODc1MyA3Ni42MDYzIDM5LjkyNTEgNzYuODU5NCAzOC45NTc3IDc2Ljg1OTRDMzcuOTkwMyA3Ni44NTk0IDM3LjA0MDEgNzYuNjA2MyAzNi4yMDM4IDc2LjEyNTlDMzUuMzg1OCA3NS42MjQ1IDM0LjczNjMgNzQuODk1MyAzNC4zMzcgNzQuMDI5OUMzMy44ODEgNzMuMDUwNiAzMy42NTMgNzEuOTgyOCAzMy42Njk4IDcwLjkwNVY3MC4yMTlDMzMuNjQ3IDY5LjEyMzIgMzMuODcxNiA2OC4wMzYxIDM0LjMyNzQgNjcuMDM2OUMzNC43MjA0IDY2LjE2NjUgMzUuMzY3IDY1LjQzMTUgMzYuMTg0NSA2NC45MjU2QzM3LjAxOTYgNjQuNDQ2NyAzNy45Njc3IDY0LjE5MzYgMzguOTMzMyA2NC4xOTE5QzM5Ljg5ODkgNjQuMTkwMyA0MC44NDc4IDY0LjQ0IDQxLjY4NDYgNjQuOTE2MUM0Mi40OTc4IDY1LjQxMzQgNDMuMTQyOSA2Ni4xMzgzIDQzLjUzNzkgNjYuOTk4OEM0My45OTI3IDY3Ljk5MTggNDQuMjE5MyA2OS4wNzIgNDQuMjAxMyA3MC4xNjE4VjcwLjg0MDJaTTI3LjU4NzMgNzAuMTk5OUwzMC41MDg5IDY0LjM1OTdIMzIuOTUwNEwyOC42OTQyIDcyLjE0NTRWNzYuNjgwNEgyNi40ODAzVjcyLjE0NTRMMjIuMjE4MyA2NC4zNTk3SDI0LjY2NzVMMjcuNTg3MyA3MC4xOTk5Wk0xOS40MTIzIDcwLjE5OTlDMTkuNDEyMyA2OC44MzQ0IDE5LjE0NjIgNjcuNzg4OSAxOC42MTM5IDY3LjA2MzZDMTguMDg1NSA2Ni4zMzU3IDE3LjMyOTUgNjUuOTcxNyAxNi4zNTM3IDY1Ljk3MTdDMTUuOTE5MiA2NS45NTQzIDE1LjQ4NzMgNjYuMDQ0MyAxNS4wOTY5IDY2LjIzMzdDMTQuNzA2NiA2Ni40MjMgMTQuMzcwMyA2Ni43MDU2IDE0LjExODYgNjcuMDU1OUMxMy41Nzg2IDY3Ljc4MjYgMTMuMzAzNSA2OC44MDcxIDEzLjI5MzIgNzAuMTI5NFY3MC44NDAyQzEzLjI5MzIgNzIuMTk1NiAxMy41NjUxIDczLjI0MSAxNC4xMDg5IDczLjk3NjVDMTQuMzYyMSA3NC4zMzM1IDE0LjcwMTggNzQuNjIyMSAxNS4wOTcgNzQuODE1OEMxNS40OTIyIDc1LjAwOTYgMTUuOTMwMiA3NS4xMDIzIDE2LjM3MTEgNzUuMDg1NUMxNy4zNDY5IDc1LjA4NTUgMTguMDk3NyA3NC43MjQ3IDE4LjYyMzYgNzQuMDAzMkMxOS4xNDk0IDczLjI4MTcgMTkuNDEyMyA3Mi4yMjczIDE5LjQxMjMgNzAuODQwMlY3MC4xOTk5Wk0yMS42MjA1IDcwLjg0MDJDMjEuNjQ0NiA3MS45Mzc0IDIxLjQyNDEgNzMuMDI2NCAyMC45NzQ0IDc0LjAyOTlDMjAuNTgzNyA3NC44OTQyIDE5Ljk0MTEgNzUuNjIzOSAxOS4xMjg4IDc2LjEyNTlDMTguMjk4NCA3Ni42MjM1IDE3LjM0MjEgNzYuODc3OSAxNi4zNzExIDc2Ljg1OTVDMTUuNDAyOCA3Ni44NzUzIDE0LjQ0OTYgNzYuNjIxMSAxMy42MjEgNzYuMTI1OUMxMi44MDcxIDc1LjYyMjYgMTIuMTYxMiA3NC44OTM2IDExLjc2MzkgNzQuMDI5OUMxMS4zMDg2IDczLjA1MDUgMTEuMDgxMiA3MS45ODI2IDExLjA5ODUgNzAuOTA1VjcwLjIxOUMxMS4wNzQ4IDY5LjEyMzEgMTEuMjk5NSA2OC4wMzU5IDExLjc1NjIgNjcuMDM2OUMxMi4xNDkyIDY2LjE2NjUgMTIuNzk1OCA2NS40MzE1IDEzLjYxMzMgNjQuOTI1NkMxNC40NDEyIDY0LjQyODggMTUuMzk0OSA2NC4xNzQ0IDE2LjM2MzQgNjQuMTkyQzE3LjMzMDYgNjQuMTc0MyAxOC4yODM0IDY0LjQyNTEgMTkuMTEzNCA2NC45MTYxQzE5LjkyNjUgNjUuNDEzNCAyMC41NzE2IDY2LjEzODMgMjAuOTY2NyA2Ni45OTg4QzIxLjQyMDYgNjcuOTkyMSAyMS42NDcxIDY5LjA3MjEgMjEuNjMwMSA3MC4xNjE4TDIxLjYyMDUgNzAuODQwMlpNMTAuMDcwNiA2Ni4wOTE4SDYuMTEzMzZWNzYuNjgwNEgzLjkyMjU4VjY2LjA5MThIMFY2NC4zNTk3SDEwLjA3MDZWNjYuMDkxOFoiIGZpbGw9IiNGREI4MTMiLz4KPC9zdmc+Cg==";
+  var rows = [
+    {lbl:"Mã sản phẩm", val:d.maSP, big:true},
+    {lbl:"Tên sản phẩm", val:d.tenSP, big:true},
+    {lbl:"Tag No", val:d.tagNo},
+    {lbl:"Số lượng", val:d.soLuong},
+    {lbl:"Người thao tác", val:d.nguoiTT},
+    {lbl:"Ngày sản xuất", val:d.lotNo},
+    {lbl:"Số khuôn", val:d.soKhuon},
+    {lbl:"Nguyên liệu", val:d.nguyenLieu},
+    {lbl:"Máy đúc", val:d.mayDuc},
+    {lbl:"Ghi chú", val:d.ghiChu}
+  ];
+  var logoX=4, logoY=4, logoW=8, logoH=7.2;
+  var titleX=logoX+logoW+3, titleY=9.6, titleSize=6.2;
+  var dividerY=13.5;
+  var rowStartY=17.5, rowH=3.9;
+  var rowsEndY = rowStartY + (rows.length-1)*rowH;
+  var qrSize=34, qrX=(W-qrSize)/2, qrY=rowsEndY+5;
+  var ftrLineY=qrY+qrSize+2, ftrTextY=ftrLineY+2.8, ftrSize=2.4;
+
+  var svg = '<svg viewBox="0 0 '+PW+' '+PH+'" width="'+PW+'mm" height="'+PH+'mm" xmlns="http://www.w3.org/2000/svg">';
+  svg += '<rect x="0" y="0" width="'+PW+'" height="'+PH+'" fill="'+bg+'"/>';
+  svg += '<g transform="translate('+offX.toFixed(3)+','+offY.toFixed(3)+') scale('+scale.toFixed(4)+')">';
+  svg += '<image x="'+logoX+'" y="'+logoY+'" width="'+logoW+'" height="'+logoH+'" href="'+logoUri+'"/>';
+  svg += '<text x="'+titleX+'" y="'+titleY+'" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="'+titleSize+'" font-weight="bold" fill="'+fg+'">TEM SẢN PHẨM'+(dark ? ' — ĐANG PHÁT TRIỂN' : '')+'</text>';
+  svg += '<line x1="4" y1="'+dividerY+'" x2="'+(W-4)+'" y2="'+dividerY+'" stroke="'+fg+'" stroke-width="0.3"/>';
+  rows.forEach(function(r, i){
+    var y = rowStartY + i*rowH;
+    var lblSize = r.big ? 3.0 : 2.6;
+    var valSize = r.big ? 3.9 : 3.0;
+    var vLen = String(r.val||"").length;
+    if (vLen > 26) valSize -= 0.5;
+    if (vLen > 40) valSize -= 0.5;
+    svg += '<text x="5" y="'+y.toFixed(2)+'" font-family="Arial,Helvetica,sans-serif" font-size="'+lblSize+'" font-weight="bold" fill="'+fg+'">'+svgEsc(r.lbl)+'</text>';
+    svg += '<text x="27" y="'+y.toFixed(2)+'" font-family="Arial,Helvetica,sans-serif" font-size="'+valSize+'" font-weight="bold" fill="'+fg+'">'+svgEsc(r.val)+'</text>';
+  });
+  if (dark){
+    // Viền trắng quanh QR khi nền tem là đen — giữ vùng yên tĩnh (quiet zone)
+    // để máy quét đọc ổn định, vì QR luôn cần nền sáng bao quanh nó.
+    svg += '<rect x="'+(qrX-1.5)+'" y="'+(qrY-1.5)+'" width="'+(qrSize+3)+'" height="'+(qrSize+3)+'" fill="#ffffff"/>';
+  }
+  svg += '<g transform="translate('+qrX+','+qrY+')">'+buildQrRects(d.qr, qrSize, '#ffffff', '#000000')+'</g>';
+  svg += '<line x1="4" y1="'+ftrLineY+'" x2="'+(W-4)+'" y2="'+ftrLineY+'" stroke="'+fg+'" stroke-width="0.3"/>';
+  svg += '<text x="'+(W/2)+'" y="'+ftrTextY+'" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="'+ftrSize+'" font-weight="bold" fill="'+fg+'">CÔNG TY CỔ PHẦN CÔNG NGHIỆP TOYOTAKI</text>';
+  svg += "</g></svg>";
+  return svg;
+}
+
+function clearAll(){
+  ["soLuong","soKhuon","nguyenLieu","ghiChu"].forEach(function(i){ document.getElementById(i).value=""; });
+  document.getElementById("soKhuon-chips").innerHTML = "";
+  document.getElementById("lotNo").value = getTodayString();
+  document.getElementById("maSP").value="";
+  document.getElementById("tenSP").value="";
+  document.getElementById("mayDuc").value="";
+  document.getElementById("nguoiTT").value="";
+  document.getElementById("loaiSP").value="hangloat";
+  document.getElementById("msg").style.display="none";
+  document.getElementById("maSP").focus();
+}
+function setBtn(v){
+  var b=document.getElementById("btnIn");
+  b.disabled=v;
+  b.textContent=v?"⏳ Đang xử lý...":"🖨 In Tem";
+}
+var msgToken = 0;
+function showMsg(t,cls,autoHideMs){
+  var el=document.getElementById("msg");
+  el.textContent=t;el.className=cls;el.style.display="block";
+  msgToken += 1;
+  var myToken = msgToken;
+  if (autoHideMs){
+    setTimeout(function(){ if (myToken === msgToken){ el.style.display="none"; } }, autoHideMs);
+  }
+}
+function err(t){ showMsg("❌ "+t,"err"); }
+
+// Hiện lỗi JS bất kỳ ngay trên màn hình (điện thoại khó xem console) — cùng
+// cách chuyencongdoan.html đã dùng để chẩn đoán lỗi camera/quét QR khi test
+// thực tế trên điện thoại.
+window.addEventListener("error", (e) => { err("Lỗi JS: " + e.message); });
+window.addEventListener("unhandledrejection", (e) => {
+  const m = (e.reason && e.reason.message) ? e.reason.message : String(e.reason);
+  // Cảnh báo vô hại của trình duyệt khi video bị dừng/thay thế đúng lúc
+  // play() đang chờ (xảy ra bình thường khi đóng camera quét QR) — bỏ qua.
+  if (/play\(\) request was interrupted/i.test(m)) return;
+  err("Lỗi JS (promise): " + m);
+});
+
+(async function init(){
+  try {
+    await loadMaster();
+    document.getElementById("lotNo").value = getTodayString();
+    document.getElementById("loading").style.display="none";
+    applyPrefill();
+    document.getElementById("mainWrap").style.display="block";
+    // ?tagNo=... (từ tra-cuu-tem.html "Xem chi tiết") → mở luôn tab Tra cứu,
+    // điền sẵn Tag No và tìm ngay.
+    if (PREFILL && PREFILL.tagNo) {
+      switchTab('search');
+      document.getElementById("searchTag").value = PREFILL.tagNo;
+      findTem();
+    }
+  } catch (e) {
+    document.getElementById("loading").style.display="none";
+    err("Không tải được dữ liệu: " + e.message);
+  }
+})();
+</script>
+</body>
+</html>

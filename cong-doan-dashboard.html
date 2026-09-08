@@ -1,0 +1,1813 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dashboard công đoạn — TOYOTAKI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet"></noscript>
+<!--
+  cong-doan-dashboard.html — dashboard dùng CHUNG cho Bavia/Gia công/Sơn/OQC,
+  khoá công đoạn qua query param (?cd=Bavia) — mỗi máy tính tại từng công đoạn
+  bookmark đúng URL của mình. KHÔNG có param thì cho chọn thủ công.
+
+  2 lớp tách biệt (quyết định đã chốt khi lập kế hoạch, xem
+  supabase/migration_phase_T3_cong_doan_dashboard.sql):
+  - Lớp truy xuất theo tem (QR) vẫn ở chuyencongdoan.html — trang này chỉ có
+    nút lối tắt mở sang đó, KHÔNG lặp lại camera/QR ở đây.
+  - Lớp này (mới) là bảng tính sổ tổ chức sản xuất: trạm/tổ lao động thủ công
+    (tên tự do, không phải danh mục máy cố định — DB vẫn gọi chung "trạm"
+    (cd_tram_hien_tai/ten_tram), UI đổi nhãn hiển thị theo công đoạn qua
+    TRAM_LABEL: Bavia/Sơn = "Line", Gia Công = "Máy", OQC = "Bàn kiểm") — mã
+    SP đang làm, ai đứng, sản lượng OK/NG CỘNG DỒN real-time xuyên ca. Card
+    "Hàng đang chờ" đọc cd_v_vi_tri_hien_tai chỉ để trưởng ca tham khảo bằng
+    mắt, KHÔNG link cứng vào trạm.
+
+  KHÔNG có kế hoạch sản xuất TRƯỚC ca (trưởng ca tạo trạm phản ứng theo hàng
+  đã nhận, không đặt mục tiêu tuần/ngày trước) — nhưng MỖI TRẠM khi gán mã SP
+  có thể nhập "KH ca (pcs)" làm mốc tham khảo tiến độ ngay trong ca đó (thêm
+  ở migration_phase_T4_ten_donvi_ke_hoach_ca.sql), không phải kế hoạch dài
+  hạn.
+-->
+<style>
+:root{--bg-page:#EEF1F5;--bg-panel:#FFFFFF;--bg-sunken:#F5F7FA;--bg-header:#1E293B;--border:#D9DFE5;--border-strong:#B8C1CC;--text:#0F172A;--text-muted:#64748B;--text-dim:#94A3B8;--accent:#0F5FA5;--accent-hover:#0A4681;--run-fg:#047857;--run-bg:#ECFDF5;--warn-fg:#B45309;--warn-bg:#FFFBEB;--alarm-fg:#B91C1C;--alarm-bg:#FEF2F2;--shadow-sm:0 1px 2px rgba(15,23,42,0.04);--shadow-md:0 4px 12px rgba(15,23,42,0.08);--shadow-lg:0 12px 32px rgba(15,23,42,0.16);}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background:var(--bg-page);min-height:100vh;color:var(--text);font-size:13px;line-height:1.35;-webkit-font-smoothing:antialiased}
+body{padding:6px 6px 60px}
+.wrap{margin:6px 0 0;display:flex;flex-direction:column;gap:6px}
+header{background:var(--bg-header);color:#F1F5F9;border-radius:8px;padding:8px 14px;display:flex;align-items:center;gap:14px;box-shadow:var(--shadow-sm);flex-wrap:wrap}
+.brand{display:flex;flex-direction:column;line-height:1.2}
+.brand .co{font-size:9px;letter-spacing:.08em;color:#94A3B8;text-transform:uppercase;font-weight:500}
+.brand .title{font-size:14px;font-weight:700;letter-spacing:-.01em;color:#FFF}
+.header-clock{margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;padding:0 10px;line-height:1.15}
+.header-clock .date{font-size:10px;color:#94A3B8}
+.header-clock .time{font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:#FFF;letter-spacing:-.02em}
+.auth-info{font-size:10px;color:#94A3B8;display:flex;align-items:center;gap:5px}
+.auth-info a{color:#93C5FD;text-decoration:none;font-weight:600}
+.card{background:var(--bg-panel);border-radius:8px;box-shadow:var(--shadow-sm);border:1px solid var(--border);padding:14px 16px;margin-bottom:0}
+.card h2{font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+.toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.fg{display:flex;flex-direction:column;gap:3px}
+.fg label{font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em}
+.fg input,.fg select{background:#fff;color:var(--text);border:1.5px solid var(--border-strong);border-radius:5px;padding:6px 9px;font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer;outline:none;min-width:120px}
+.fg input:focus,.fg select:focus{border-color:var(--accent)}
+header .fg{flex-direction:row;align-items:center;gap:6px}
+header .fg label{color:#94A3B8;white-space:nowrap}
+header .fg input,header .fg select{background:#334155;color:#F1F5F9;border:1px solid #475569}
+header .fg input:focus,header .fg select:focus{border-color:#93C5FD}
+.btn{border:none;border-radius:5px;padding:7px 14px;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;transition:background .12s;display:inline-flex;align-items:center;gap:6px;background:var(--accent);color:#fff}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn:hover{background:var(--accent-hover)}
+.btn-outline{background:transparent;border:1.5px solid var(--accent);color:var(--accent)}
+.btn-outline:hover{background:var(--bg-sunken)}
+header .btn-outline{border-color:#475569;color:#F1F5F9}
+header .btn-outline:hover{background:#334155}
+.btn-good{background:var(--run-fg);color:#fff}
+.btn-good:hover{background:#036049}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover:not(:disabled){background:var(--accent-hover)}
+.tram-divider td{background:var(--bg-sunken);font-weight:700;font-size:10.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.03em;padding:6px 10px}
+.btn-tiny{border:1px solid var(--border-strong);background:var(--bg-panel);color:var(--text-muted);border-radius:5px;padding:5px 9px;font-size:11px;font-weight:600;cursor:pointer}
+.btn-tiny:hover{border-color:var(--accent);color:var(--accent)}
+.btn-tiny.danger{border-color:#F87171;color:var(--alarm-fg)}
+.tbl-wrap{overflow-x:auto;border-radius:8px;border:1px solid var(--border)}
+table{border-collapse:collapse;width:100%;font-size:12.5px;min-width:760px}
+th,td{border-bottom:1px solid var(--border);padding:7px 8px;text-align:left}
+th{background:var(--bg-sunken);color:var(--text-muted);font-size:10px;text-transform:uppercase;letter-spacing:.05em;font-weight:700}
+td.num{text-align:right;font-weight:700;font-family:'JetBrains Mono',monospace}
+.empty-row td,.empty{text-align:center;color:var(--text-dim);padding:20px;font-style:italic}
+#msg{margin:0 0 6px;padding:11px 14px;border-radius:8px;font-size:13px;font-weight:600;display:none}
+.err{background:var(--alarm-bg);color:var(--alarm-fg);border:1px solid #FCA5A5;display:block!important}
+.ok{background:var(--run-bg);color:var(--run-fg);border:1px solid #A7F3D0;display:block!important}
+.waiting-list{display:flex;flex-direction:column;gap:6px;font-size:12px}
+.waiting-item{display:flex;justify-content:space-between;border-bottom:1px dashed var(--border);padding:5px 0}
+.modal-mask{display:none;position:fixed;inset:0;background:rgba(15,23,42,.5);align-items:center;justify-content:center;z-index:50;padding:14px}
+.modal-mask.open{display:flex}
+.modal{background:var(--bg-panel);border-radius:10px;max-width:480px;width:100%;max-height:92vh;overflow-y:auto;box-shadow:var(--shadow-lg)}
+.modal-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border)}
+.modal-title{font-size:14.5px;font-weight:700;color:var(--text)}
+.modal-close{border:none;background:none;font-size:18px;cursor:pointer;color:var(--text-dim)}
+.modal-body{padding:16px 18px;display:flex;flex-direction:column;gap:12px}
+.modal-foot{display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--border)}
+.shortcut-row{display:flex;gap:8px;flex-wrap:wrap}
+.shortcut-row a{text-decoration:none}
+.kb-row{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px}
+.kb-row .kb-info{flex:1;min-width:0;font-size:12.5px}
+.kb-row .kb-info b{font-family:'JetBrains Mono',monospace}
+.kb-row .kb-sub{font-size:10.5px;color:var(--text-dim);margin-top:1px}
+.kb-row input[type=text]{width:110px;border:1.5px solid var(--border-strong);border-radius:6px;padding:5px 7px;font-size:12px}
+.kb-row input[type=number]{width:70px;border:1.5px solid var(--border-strong);border-radius:6px;padding:5px 7px;font-size:12px}
+.kb-row select{width:110px;border:1.5px solid var(--border-strong);border-radius:6px;padding:5px 7px;font-size:12px;background:#fff}
+.sub-cd-badge{display:inline-block;font-size:9.5px;font-weight:700;padding:1px 6px;border-radius:10px;background:var(--bg-sunken);color:var(--text-muted);border:1px solid var(--border);text-transform:uppercase;letter-spacing:.03em}
+.ngref{margin-top:5px;font-size:11.5px;color:var(--text-muted);line-height:1.7}
+.ngref b{font-family:'JetBrains Mono',monospace;color:var(--accent)}
+.summary{background:var(--bg-panel);border-radius:8px;padding:8px 16px;display:grid;grid-template-columns:auto repeat(6,1fr);gap:14px;box-shadow:var(--shadow-sm);border:1px solid var(--border);align-items:center}
+.summary-label{font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;padding-right:12px;border-right:1px solid var(--border);line-height:1.1}
+.summary-label .big{font-size:12px;color:var(--text);display:block;margin-top:2px}
+.stat{display:flex;flex-direction:column;gap:1px}
+.stat-label{font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em}
+.stat-value{font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;color:var(--text);letter-spacing:-.02em;line-height:1.1}
+.stat-value.warn{color:var(--warn-fg)}.stat-value.alarm{color:var(--alarm-fg)}.stat-value.run{color:var(--run-fg)}
+.stat-sub{font-size:10px;color:var(--text-muted)}
+@media(max-width:900px){.summary{grid-template-columns:repeat(3,1fr)}.summary-label{grid-column:1/-1;border-right:none;border-bottom:1px solid var(--border);padding:0 0 6px}}
+</style>
+</head>
+<body>
+
+<div id="msg"></div>
+
+<div class="wrap">
+  <div class="card" id="pickCongDoanCard" style="display:none">
+    <h2>Chọn công đoạn</h2>
+    <div class="toolbar">
+      <select id="pickCongDoan"></select>
+      <button type="button" class="btn" id="btnPickCongDoan">Mở dashboard</button>
+    </div>
+    <p style="font-size:11px;color:#999;margin-top:8px">Mẹo: bookmark thẳng URL kèm ?cd= (vd cong-doan-dashboard.html?cd=Bavia) cho máy tính tại đúng công đoạn đó, không cần chọn lại mỗi lần.</p>
+  </div>
+
+  <div id="mainArea" style="display:none">
+    <header>
+      <div class="brand">
+        <div class="co">Toyotaki</div>
+        <div class="title" id="hdrTitle">Dashboard công đoạn</div>
+      </div>
+      <div class="fg"><label>Ngày</label><input type="date" id="ngay"></div>
+      <div class="fg"><label>Ca</label><select id="ca"></select></div>
+      <div class="shortcut-row">
+        <a id="lnkChuyen" href="chuyencongdoan.html" target="_blank" rel="noopener"><button type="button" class="btn-outline btn">📷 Nhận / Chuyển hàng</button></a>
+        <a id="lnkDongGoi" href="chuyencongdoan.html" target="_blank" rel="noopener"><button type="button" class="btn-outline btn">📦 Đóng gói / In tem</button></a>
+      </div>
+      <button type="button" class="btn-outline btn" id="btnKhsxBatch">⚡ Nạp kế hoạch từ KHSX tuần</button>
+      <button type="button" class="btn btn-primary" id="btnKetCa">Kết ca &amp; xuất báo cáo</button>
+      <div class="header-clock">
+        <div class="date" id="hdrClockDate"></div>
+        <div class="time" id="hdrClockTime"></div>
+      </div>
+    </header>
+
+    <section class="summary" id="summary">
+      <div class="summary-label">Tổng hợp<span class="big">CA HIỆN TẠI</span></div>
+      <div class="stat"><span class="stat-label">Tổng KH ca</span><span class="stat-value" id="sm-kh">—</span><span class="stat-sub" id="sm-kh-sub">—</span></div>
+      <div class="stat"><span class="stat-label">Tổng OK ca</span><span class="stat-value run" id="sm-ok">—</span><span class="stat-sub" id="sm-ok-sub">—</span></div>
+      <div class="stat"><span class="stat-label">Tổng NG ca</span><span class="stat-value alarm" id="sm-ng">—</span><span class="stat-sub" id="sm-ng-sub">—</span></div>
+      <div class="stat"><span class="stat-label">% Hoàn thành</span><span class="stat-value" id="sm-pct">—</span><span class="stat-sub">so với KH ca</span></div>
+      <div class="stat"><span class="stat-label">Tỷ lệ NG</span><span class="stat-value" id="sm-ngrate">—</span><span class="stat-sub">NG / (OK + NG)</span></div>
+      <div class="stat"><span class="stat-label" id="sm-run-label">Line đang chạy</span><span class="stat-value" id="sm-run">—</span><span class="stat-sub" id="sm-run-sub">—</span></div>
+    </section>
+
+    <div class="card">
+      <h2 id="tramsSectionTitle">🧑‍🏭 Trạm đang hoạt động</h2>
+      <p id="tramsSectionNote" style="font-size:10.5px;color:#999;margin:-6px 0 10px">Các dòng mờ, chữ nghiêng là kế hoạch tuần chưa tạo trạm — bấm "+ Tạo..." để tạo ngay với Mã SP/KH ca điền sẵn.</p>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th id="thCongDoanSub" style="display:none">Công đoạn</th><th id="thTenTram">Tên trạm</th><th>Mã SP</th><th>Tên SP</th><th>Người kiểm tra</th><th>KH ca</th><th>KH tuần</th><th>OK ca này</th><th>NG ca này</th><th></th></tr></thead>
+          <tbody id="tramTbody"><tr class="empty-row"><td colspan="10">Đang tải...</td></tr></tbody>
+        </table>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+        <button type="button" class="btn" id="btnAddTram">+ Thêm trạm</button>
+        <button type="button" class="btn-outline btn" id="btnChepLine" style="display:none">📋 Chép line từ ca trước</button>
+      </div>
+    </div>
+
+    <div class="card" id="dangDoCard" style="display:none">
+      <h2>📥 Thùng đang dở (còn hàng chưa xử lý hết, đã làm ở line này)</h2>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Tag No</th><th>Mã SP</th><th>SL còn lại</th><th>Lô</th><th>Khuôn</th><th>Máy đúc</th></tr></thead>
+          <tbody id="dangDoTbody"><tr class="empty-row"><td colspan="6">—</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card" id="ngChoSuaCard" style="display:none">
+      <h2>🔧 Hàng NG chờ sửa</h2>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th></th><th>Tag No</th><th>Mã SP</th><th>SL chờ sửa</th><th>Line gốc</th><th>Khuôn</th><th></th></tr></thead>
+          <tbody id="ngChoSuaTbody"><tr class="empty-row"><td colspan="7">—</td></tr></tbody>
+        </table>
+      </div>
+      <div style="margin-top:10px"><button type="button" class="btn-outline btn" id="btnGomNg" disabled>Gom tem (chọn ≥ 2)</button></div>
+    </div>
+
+    <div class="card" id="doiSoatCard" style="display:none">
+      <h2>🔎 Đối soát thùng &amp; hoàn tác</h2>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+        <input type="text" autocomplete="off" id="ds-tag" placeholder="Quét / nhập Tag No thùng nguồn (hoặc tem TKB) rồi Enter" style="flex:1;min-width:220px">
+        <button type="button" class="btn-outline btn" id="ds-btn">Tra</button>
+      </div>
+      <div id="ds-result" style="font-size:12.5px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Nạp kế hoạch hàng loạt từ KHSX tuần -->
+<div class="modal-mask" id="modalKhsxBatch">
+  <div class="modal" style="max-width:640px">
+    <div class="modal-head">
+      <div class="modal-title">⚡ Nạp kế hoạch từ KHSX tuần</div>
+      <button class="modal-close" onclick="closeModal('modalKhsxBatch')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:11.5px;color:#999">Các mã SP có kế hoạch tuần hôm nay nhưng chưa có trạm nào chạy. Bỏ tick để không nạp, sửa tên/KH ca nếu cần trước khi lưu.</p>
+      <div id="kbList" style="display:flex;flex-direction:column;gap:8px"></div>
+      <div class="empty" id="kbEmpty" style="display:none">Không có mã SP nào cần nạp — tất cả đã có trạm chạy hoặc chưa có kế hoạch tuần cho hôm nay.</div>
+    </div>
+    <div class="modal-foot">
+      <span id="kbCountLabel" style="font-size:11.5px;color:#999;margin-right:auto"></span>
+      <button type="button" class="btn-outline btn" onclick="closeModal('modalKhsxBatch')">Huỷ</button>
+      <button type="button" class="btn btn-good" id="btnSubmitKhsxBatch">Nạp kế hoạch</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Thêm trạm -->
+<div class="modal-mask" id="modalAddTram">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title" id="addTramTitle">+ Thêm trạm</div><button class="modal-close" onclick="closeModal('modalAddTram')">✕</button></div>
+    <div class="modal-body">
+      <div class="fg" id="at-congdoan-wrap" style="display:none"><label class="req">Công đoạn</label><select id="at-congdoan"></select></div>
+      <div class="fg" id="at-khsx-wrap" style="display:none"><label>Chọn mã SP từ KHSX tuần</label><select id="at-khsx-pick"></select></div>
+      <div class="fg"><label class="req" id="lblTenTram">Tên trạm/tổ</label><input type="text" autocomplete="off" id="at-ten" placeholder="VD: Tổ 1, Bàn 3..."></div>
+      <div class="fg"><label class="req">Mã SP</label><input type="text" autocomplete="off" id="at-masp" list="dlMaSp" oninput="onMaSpPick('at-masp','at-tensp')"></div>
+      <div class="fg"><label>Tên SP</label><input type="text" autocomplete="off" id="at-tensp"></div>
+      <div class="fg"><label id="lbl-at-khca">KH ca (pcs) — mốc tham khảo tiến độ, không bắt buộc</label><input type="number" min="0" id="at-khca"></div>
+      <div class="fg" id="at-khtuan-wrap" style="display:none"><label>KH tuần (pcs)</label><input type="number" min="0" id="at-khtuan"></div>
+      <div class="fg"><label>Người kiểm tra</label><input type="text" autocomplete="off" id="at-nguoi" list="dlNhanVien"><span id="at-nguoi-hint" style="font-size:11px;color:#999"></span></div>
+    </div>
+    <div class="modal-foot"><button class="btn-outline btn" onclick="closeModal('modalAddTram')">Huỷ</button><button class="btn" id="btnSubmitAddTram">Thêm</button></div>
+  </div>
+</div>
+
+<!-- MODAL: Nhập sản lượng -->
+<div class="modal-mask" id="modalNhapSL">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">+ Nhập sản lượng <span id="ns-tram-label"></span></div><button class="modal-close" onclick="closeModal('modalNhapSL')">✕</button></div>
+    <div class="modal-body">
+      <div class="fg"><label>Số OK thêm</label><input type="number" min="0" id="ns-ok" value="0"></div>
+      <div class="fg"><label>Số NG thêm</label><input type="number" min="0" id="ns-ng" value="0"></div>
+      <div class="fg"><label>Ghi chú (bắt buộc nếu có NG)</label><input type="text" autocomplete="off" id="ns-ghichu" placeholder="Lý do NG..."></div>
+    </div>
+    <div class="modal-foot"><button class="btn-outline btn" onclick="closeModal('modalNhapSL')">Huỷ</button><button class="btn" id="btnSubmitNhapSL">Lưu</button></div>
+  </div>
+</div>
+
+<!-- MODAL: Sửa trạm (người thao tác / KH ca) -->
+<div class="modal-mask" id="modalSuaTram">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">✏️ Sửa <span id="st-tram-label"></span></div><button class="modal-close" onclick="closeModal('modalSuaTram')">✕</button></div>
+    <div class="modal-body">
+      <p style="font-size:11.5px;color:#999">Chỉ sửa người thao tác/KH ca — không đụng mã SP hay sản lượng OK/NG đang đếm.</p>
+      <div class="fg"><label>Người kiểm tra</label><input type="text" autocomplete="off" id="st-nguoi" list="dlNhanVien"><span id="st-nguoi-hint" style="font-size:11px;color:#999"></span></div>
+      <div class="fg"><label>KH ca (pcs)</label><input type="number" min="0" id="st-khca"></div>
+    </div>
+    <div class="modal-foot"><button class="btn-outline btn" onclick="closeModal('modalSuaTram')">Huỷ</button><button class="btn" id="btnSubmitSuaTram">Lưu</button></div>
+  </div>
+</div>
+
+<!-- MODAL: Đổi mã SP -->
+<div class="modal-mask" id="modalDoiMa">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">🔄 Đổi mã SP <span id="dm-tram-label"></span></div><button class="modal-close" onclick="closeModal('modalDoiMa')">✕</button></div>
+    <div class="modal-body">
+      <p style="font-size:11.5px;color:#999" id="dm-desc">Sản lượng OK/NG hiện tại sẽ được cộng vào báo cáo cho đúng mã SP cũ, sau đó reset về 0 với mã mới.</p>
+      <div class="fg" id="dm-khsx-wrap" style="display:none"><label>Chọn mã SP từ KHSX tuần</label><select id="dm-khsx-pick"></select></div>
+      <div class="fg"><label class="req">Mã SP mới</label><input type="text" autocomplete="off" id="dm-masp" list="dlMaSp" oninput="onMaSpPick('dm-masp','dm-tensp')"></div>
+      <div class="fg"><label>Tên SP</label><input type="text" autocomplete="off" id="dm-tensp"></div>
+      <div class="fg"><label id="lbl-dm-khca">KH ca (pcs) — không bắt buộc</label><input type="number" min="0" id="dm-khca"></div>
+      <div class="fg" id="dm-khtuan-wrap" style="display:none"><label>KH tuần (pcs)</label><input type="number" min="0" id="dm-khtuan"></div>
+      <div class="fg"><label>Người kiểm tra mới (để trống nếu giữ nguyên)</label><input type="text" autocomplete="off" id="dm-nguoi" list="dlNhanVien"><span id="dm-nguoi-hint" style="font-size:11px;color:#999"></span></div>
+    </div>
+    <div class="modal-foot"><button class="btn-outline btn" onclick="closeModal('modalDoiMa')">Huỷ</button><button class="btn" id="btnSubmitDoiMa">Xác nhận đổi</button></div>
+  </div>
+</div>
+
+<!-- MODAL: Xử lý thùng (Bavia line mode) -->
+<div class="modal-mask" id="modalXuLyThung">
+  <div class="modal" style="max-width:680px">
+    <div class="modal-head"><div class="modal-title">📦 Xử lý thùng <span id="xlt-line-label"></span></div><button class="modal-close" onclick="closeModal('modalXuLyThung')">✕</button></div>
+    <div class="modal-body" id="xlt-body">
+      <div class="fg">
+        <label class="req">Quét / nhập Tag No thùng nguồn (Enter để thêm)</label>
+        <input type="text" autocomplete="off" id="xlt-scan" placeholder="Bấm vào đây rồi quét QR, hoặc gõ Tag No + Enter">
+      </div>
+      <div id="xlt-srcList" style="margin:6px 0 10px"></div>
+      <div id="xlt-srcEmpty" style="font-size:11.5px;color:#999;margin-bottom:10px">Chưa quét thùng nguồn nào.</div>
+
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div class="fg" style="flex:1;min-width:110px"><label class="req">OK (đạt)</label><input type="number" min="0" id="xlt-ok" value="0"></div>
+        <div class="fg" style="flex:1;min-width:110px"><label>NG phế</label><input type="number" min="0" id="xlt-ngphe" value="0"></div>
+        <div class="fg" style="flex:1;min-width:110px"><label>NG sửa</label><input type="number" min="0" id="xlt-ngsua" value="0"></div>
+      </div>
+      <div class="fg">
+        <label>Nội dung NG (bắt buộc nếu có NG) — ghi theo mã lỗi, VD: <b>5V, 4M</b></label>
+        <input type="text" autocomplete="off" id="xlt-ngly" placeholder="VD: 5V, 4M, 2X-nứt chân">
+        <span id="xlt-ngly-sum" style="font-size:11px;color:#999"></span>
+      </div>
+
+      <div class="fg">
+        <label>Cách đóng thùng OK ra</label>
+        <div style="display:flex;flex-direction:column;gap:4px;font-size:12.5px">
+          <label style="font-weight:400"><input type="radio" name="xlt-cach" value="nguyen" checked> 1 thùng = toàn bộ OK</label>
+          <label style="font-weight:400"><input type="radio" name="xlt-cach" value="quy_cach"> Chia theo quy cách <input type="number" min="1" id="xlt-qc" style="width:70px;margin-left:4px" placeholder="pcs/thùng"></label>
+          <label style="font-weight:400"><input type="radio" name="xlt-cach" value="gop"> Gộp vào thùng đang mở <select id="xlt-gop" style="margin-left:4px"></select></label>
+        </div>
+      </div>
+      <div class="fg"><label>Người thao tác</label><input type="text" autocomplete="off" id="xlt-nguoi" list="dlNguoiLine"><span id="xlt-nguoi-hint" style="font-size:11px;color:#999"></span></div>
+      <div id="xlt-canhbao" style="font-size:11.5px;color:var(--warn-fg)"></div>
+      <details style="margin-top:8px"><summary style="font-size:11.5px;color:var(--text-muted);cursor:pointer">Bảng mã lỗi tham khảo</summary><div id="xlt-ngref" class="ngref"></div></details>
+    </div>
+    <div id="xlt-result" style="display:none;padding:4px 2px">
+      <div style="font-size:13px;font-weight:600;color:var(--run-fg);margin-bottom:6px">✅ Đã xử lý. Thùng ra:</div>
+      <div id="xlt-resultList"></div>
+    </div>
+    <div class="modal-foot">
+      <button type="button" class="btn-outline btn" onclick="closeModal('modalXuLyThung')">Đóng</button>
+      <button type="button" class="btn" id="btnSubmitXuLyThung">Xác nhận xử lý</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Sửa hàng NG (GĐ3) -->
+<div class="modal-mask" id="modalSuaHang">
+  <div class="modal" style="max-width:620px">
+    <div class="modal-head"><div class="modal-title">🔧 Sửa hàng NG <span id="sh-tag-label"></span></div><button class="modal-close" onclick="closeModal('modalSuaHang')">✕</button></div>
+    <div class="modal-body" id="sh-body">
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div class="fg" style="flex:1;min-width:120px"><label class="req">Sửa được (OK)</label><input type="number" min="0" id="sh-ok" value="0"></div>
+        <div class="fg" style="flex:1;min-width:120px"><label>Bỏ hẳn (NG phế)</label><input type="number" min="0" id="sh-ngphe" value="0"></div>
+      </div>
+      <div class="fg">
+        <label>Nội dung NG phế (bắt buộc nếu có) — VD: <b>5V, 4M</b></label>
+        <input type="text" autocomplete="off" id="sh-ngly" placeholder="VD: 5V, 4M">
+        <span id="sh-ngly-sum" style="font-size:11px;color:#999"></span>
+      </div>
+      <div class="fg">
+        <label>Cách đóng thùng OK ra</label>
+        <div style="display:flex;flex-direction:column;gap:4px;font-size:12.5px">
+          <label style="font-weight:400"><input type="radio" name="sh-cach" value="nguyen" checked> 1 thùng = toàn bộ OK</label>
+          <label style="font-weight:400"><input type="radio" name="sh-cach" value="quy_cach"> Chia quy cách <input type="number" min="1" id="sh-qc" style="width:70px;margin-left:4px" placeholder="pcs/thùng"></label>
+          <label style="font-weight:400"><input type="radio" name="sh-cach" value="gop"> Gộp vào thùng <select id="sh-gop" style="margin-left:4px"></select></label>
+        </div>
+      </div>
+      <div class="fg"><label>Người thao tác</label><input type="text" autocomplete="off" id="sh-nguoi" list="dlNguoiLine"></div>
+      <div id="sh-canhbao" style="font-size:11.5px;color:var(--warn-fg)"></div>
+      <p style="font-size:11px;color:#999;margin-top:4px">Phần chưa nhập được giữ lại trên tem NG (ca sau sửa tiếp). OK ghi vào báo cáo ngày/ca đang chọn.</p>
+      <details style="margin-top:6px"><summary style="font-size:11.5px;color:var(--text-muted);cursor:pointer">Bảng mã lỗi tham khảo</summary><div id="sh-ngref" class="ngref"></div></details>
+    </div>
+    <div id="sh-result" style="display:none;padding:4px 2px">
+      <div style="font-size:13px;font-weight:600;color:var(--run-fg);margin-bottom:6px">✅ Đã sửa. Thùng OK ra:</div>
+      <div id="sh-resultList"></div>
+    </div>
+    <div class="modal-foot">
+      <button type="button" class="btn-outline btn" onclick="closeModal('modalSuaHang')">Đóng</button>
+      <button type="button" class="btn" id="btnSubmitSuaHang">Xác nhận sửa</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Báo cáo sau khi kết ca -->
+<div class="modal-mask" id="modalReport">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-head"><div class="modal-title">🏁 Báo cáo kết ca</div><button class="modal-close" onclick="closeModal('modalReport')">✕</button></div>
+    <div class="modal-body">
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Mã SP</th><th>Tên SP</th><th>Nhận vào</th><th>OK</th><th>NG phế</th><th>NG sửa</th><th>Tỷ lệ NG</th></tr></thead>
+          <tbody id="reportTbody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn" onclick="closeModal('modalReport')">Đóng</button></div>
+  </div>
+</div>
+
+<datalist id="dlMaSp"></datalist>
+<datalist id="dlNhanVien"></datalist>
+<datalist id="dlNguoiLine"></datalist>
+
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="shared/supabase-client.js"></script>
+<script src="shared/navbar.js"></script>
+<script>
+// "Cắt viền" KHÔNG còn là 1 dashboard riêng — coi là 1 công đoạn con của Gia
+// Công (SP có cả 2 vẫn cần 2 nhãn cong_doan riêng trong DB để phân biệt đúng
+// lượt, chỉ gộp lại ở TẦNG HIỂN THỊ dashboard này). CONG_DOAN_SUB_MAP khai
+// báo "trang X hiển thị gộp các cong_doan nào" — trang chính vẫn là 1 giá trị
+// CONG_DOAN_LIST, các giá trị phụ không xuất hiện trong danh mục chọn/menu.
+const CONG_DOAN_LIST = ["Bavia", "Gia Công", "Sơn", "OQC"];
+const CONG_DOAN_SUB_MAP = { 'Gia Công': ['Gia Công', 'Cắt viền'] };
+const CA_LIST = ["Ca ngày", "Ca đêm", "Ca 1", "Ca 2"];
+let congDoan = null;
+let congDoanGroup = [];
+let productMap = {};
+let trams = [];
+let planToday = [];
+let currentTarget = null;
+const TRAM_LABEL_MAP = { 'Bavia': 'Line', 'Gia Công': 'Máy', 'Cắt viền': 'Máy', 'Sơn': 'Line', 'OQC': 'Bàn kiểm' };
+function tramLabel(){ return TRAM_LABEL_MAP[congDoan] || 'Trạm'; }
+
+// Công đoạn có danh mục Line/Máy CỐ ĐỊNH trong master_machines (theo bo_phan) →
+// dashboard chạy "kiểu Đúc": bảng luôn liệt kê sẵn line, bấm vào line trống để
+// gán kế hoạch (từ KHSX tuần), có nút Đổi SP và In tem (tách/gộp). Công đoạn
+// không map → giữ nguyên mô hình trạm tự do như cũ.
+const CD_TO_BO_PHAN = { 'Bavia': 'Bavia' };
+let lineCatalog = [];   // [ma_may] — rỗng nghĩa là dùng mô hình trạm tự do
+let empList = [];        // master_employees {ten_nhan_vien,vai_tro,bo_phan,line_may}
+function isLineMode(){ return lineCatalog.length > 0; }
+// Người được phép thao tác trên 1 line: nhân viên bộ phận này + line_may chứa line.
+function nguoiChoLine(line){
+  const bp = CD_TO_BO_PHAN[congDoan];
+  return empList
+    .filter(e => e.vai_tro === 'nhan_vien' && e.bo_phan === bp && (e.line_may || []).includes(line))
+    .map(e => e.ten_nhan_vien);
+}
+
+function escapeHtml(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtNum(n){ return (Number(n) || 0).toLocaleString('vi-VN'); }
+let msgTimer;
+function showMsg(text, cls){
+  const el = document.getElementById('msg');
+  el.textContent = text;
+  el.className = cls;
+  clearTimeout(msgTimer);
+  // Tự ẩn: thông báo thành công 2.5s, lỗi 6s (không kẹt mãi trên đầu trang).
+  const ms = cls === 'err' ? 6000 : 2500;
+  msgTimer = setTimeout(() => { el.className = ''; el.textContent = ''; }, ms);
+}
+function fillSelect(id, arr, placeholder){
+  const sel = document.getElementById(id);
+  sel.innerHTML = (placeholder ? '<option value="">' + placeholder + '</option>' : '') + (arr || []).map(v => `<option value="${v}">${v}</option>`).join("");
+}
+function getTodayString(){
+  const d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+}
+function openModal(id){ document.getElementById(id).classList.add('open'); }
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+function onMaSpPick(inputId, tenId){
+  const ma = document.getElementById(inputId).value.trim();
+  if (productMap[ma]) document.getElementById(tenId).value = productMap[ma];
+}
+
+/* ---------- Khởi tạo công đoạn từ ?cd= ---------- */
+function initCongDoan(){
+  const params = new URLSearchParams(location.search);
+  let cd = params.get('cd');
+  // Bookmark cũ trỏ thẳng "Cắt viền" (khi nó còn là dashboard riêng) — chuyển
+  // êm sang Gia Công, nơi giờ hiển thị gộp cả 2.
+  if (cd === 'Cắt viền') cd = 'Gia Công';
+  if (cd && CONG_DOAN_LIST.includes(cd)){
+    congDoan = cd;
+    startDashboard();
+    return;
+  }
+  document.getElementById('pickCongDoanCard').style.display = 'block';
+  fillSelect('pickCongDoan', CONG_DOAN_LIST, '-- Chọn công đoạn --');
+  document.getElementById('btnPickCongDoan').addEventListener('click', () => {
+    const v = document.getElementById('pickCongDoan').value;
+    if (!v) return showMsg('Chọn công đoạn trước.', 'err');
+    location.href = location.pathname + '?cd=' + encodeURIComponent(v);
+  });
+}
+
+async function startDashboard(){
+  congDoanGroup = CONG_DOAN_SUB_MAP[congDoan] || [congDoan];
+  const merged = congDoanGroup.length > 1;
+  const titleSuffix = merged ? congDoan + ' (gồm ' + congDoanGroup.slice(1).join(', ') + ')' : congDoan;
+  if (window.MesNav) MesNav.setTitle('Dashboard công đoạn — ' + titleSuffix, null);
+  document.title = 'Dashboard ' + congDoan + ' — TOYOTAKI';
+  document.getElementById('hdrTitle').textContent = 'Dashboard ' + titleSuffix;
+  document.getElementById('mainArea').style.display = 'block';
+  document.getElementById('thCongDoanSub').style.display = merged ? '' : 'none';
+  document.getElementById('at-congdoan-wrap').style.display = merged ? '' : 'none';
+  if (merged) fillSelect('at-congdoan', congDoanGroup, null);
+  applyTramLabel();
+  document.getElementById('ngay').value = getTodayString();
+  fillSelect('ca', CA_LIST, '-- Chọn ca --');
+  // Công đoạn chỉ chạy 1 ca (CONG_DOAN_MOT_CA) — mặc định sẵn "Ca ngày", khoá
+  // lại vì hiện chưa có lựa chọn nào khác hợp lệ, khỏi bắt chọn lại mỗi lần
+  // vào trang. Bỏ công đoạn khỏi CONG_DOAN_MOT_CA (khi mở ca đêm) sẽ tự mở
+  // khoá lại, không cần sửa đoạn này.
+  const caSel = document.getElementById('ca');
+  if (CONG_DOAN_MOT_CA.includes(congDoan)){
+    caSel.value = 'Ca ngày';
+    caSel.disabled = true;
+  }
+  document.getElementById('ngay').addEventListener('change', reloadAll);
+  caSel.addEventListener('change', reloadAll);
+
+  startHeaderClock();
+  await loadDanhMuc();
+  reloadAll();
+}
+
+function startHeaderClock(){
+  function tick(){
+    const d = new Date();
+    document.getElementById('hdrClockDate').textContent = d.toLocaleDateString('vi-VN');
+    document.getElementById('hdrClockTime').textContent = d.toLocaleTimeString('vi-VN', { hour12: false });
+  }
+  tick();
+  setInterval(tick, 1000);
+}
+
+async function loadDanhMuc(){
+  const [prodRes, empRes] = await Promise.all([
+    sb.from('master_products').select('ma_sp,ten_sp'),
+    sb.from('master_employees').select('ten_nhan_vien,vai_tro,bo_phan,line_may').order('ten_nhan_vien'),
+  ]);
+  (prodRes.data || []).forEach(p => { productMap[p.ma_sp] = p.ten_sp || ''; });
+  document.getElementById('dlMaSp').innerHTML = Object.keys(productMap).sort().map(ma => `<option value="${escapeHtml(ma)}">`).join('');
+  empList = empRes.data || [];
+
+  const boPhan = CD_TO_BO_PHAN[congDoan];
+  if (boPhan){
+    const { data: mm } = await sb.from('master_machines').select('ma_may').eq('bo_phan', boPhan).order('ma_may');
+    lineCatalog = (mm || []).map(r => r.ma_may).filter(Boolean).sort((a, b) => a.localeCompare(b, 'vi', { numeric: true }));
+  }
+  if (isLineMode()){
+    document.getElementById('btnAddTram').style.display = 'none';
+    document.getElementById('btnChepLine').style.display = '';
+    document.getElementById('tramsSectionTitle').textContent = '🧑‍🏭 ' + tramLabel() + ' theo danh mục';
+    document.getElementById('doiSoatCard').style.display = '';
+    const note = document.getElementById('tramsSectionNote');
+    if (note) note.textContent = tramLabel() + ' lấy từ danh mục Máy-Line. Line chưa có kế hoạch xếp riêng bên dưới — bấm "Gán kế hoạch" để chọn mã SP từ KHSX tuần.';
+  }
+  document.getElementById('dlNhanVien').innerHTML = (empRes.data || []).map(e => `<option value="${escapeHtml(e.ten_nhan_vien)}">`).join('');
+}
+
+function reloadAll(){
+  if (!document.getElementById('ca').value) return;
+  loadTrams();
+  // "Hàng đang chờ tại công đoạn" tạm ẩn khỏi dashboard (loadWaiting giữ lại
+  // để đưa vào sau) — không gọi ở đây nữa.
+  loadKhsxToday();
+  if (isLineMode()){ loadDangDo(); loadNgChoSua(); }
+}
+
+function applyTramLabel(){
+  const lbl = tramLabel();
+  document.getElementById('tramsSectionTitle').textContent = '🧑‍🏭 ' + lbl + ' đang hoạt động';
+  document.getElementById('thTenTram').textContent = 'Tên ' + lbl;
+  document.getElementById('btnAddTram').textContent = '+ Thêm ' + lbl;
+  document.getElementById('addTramTitle').textContent = '+ Thêm ' + lbl;
+  document.getElementById('lblTenTram').textContent = 'Tên ' + lbl;
+}
+
+/* ---------- Trạm đang hoạt động ---------- */
+async function loadTrams(){
+  const ngay = document.getElementById('ngay').value;
+  const ca = document.getElementById('ca').value;
+  const tbody = document.getElementById('tramTbody');
+  tbody.innerHTML = '<tr class="empty-row"><td colspan="8">Đang tải...</td></tr>';
+  const { data, error } = await sb.from('cd_tram_hien_tai')
+    .select('*').in('cong_doan', congDoanGroup).eq('ngay', ngay).eq('ca', ca).order('ten_tram');
+  if (error){ tbody.innerHTML = '<tr class="empty-row"><td colspan="9">Lỗi: ' + escapeHtml(error.message) + '</td></tr>'; return; }
+  trams = data || [];
+  renderTrams();
+}
+
+function activeTramRowHtml(t, merged){
+  const cdCell = merged ? `<td><span class="sub-cd-badge">${escapeHtml(t.cong_doan)}</span></td>` : '';
+  return `
+    <tr>
+      ${cdCell}
+      <td><b>${escapeHtml(t.ten_tram)}</b></td>
+      <td>${escapeHtml(t.ma_sp)}</td>
+      <td>${escapeHtml(t.ten_sp) || '<span style="color:#999">—</span>'}</td>
+      <td>${escapeHtml(t.nguoi_thao_tac) || '<span style="color:#999">—</span>'}</td>
+      <td class="num">${t.kh_ca != null ? fmtNum(t.kh_ca) : '<span style="color:#999">—</span>'}</td>
+      <td class="num">${t.kh_tuan != null ? fmtNum(t.kh_tuan) : '<span style="color:#999">—</span>'}</td>
+      <td class="num" style="color:#1a7a3a">${fmtNum(t.so_luong_ok)}</td>
+      <td class="num" style="color:#c00">${fmtNum(t.so_luong_ng)}${Number(t.so_luong_ng_sua) > 0 ? ` <span style="color:var(--warn-fg)" title="NG chờ sửa">+${fmtNum(t.so_luong_ng_sua)} sửa</span>` : ''}</td>
+      <td style="white-space:nowrap">
+        ${isLineMode() ? `<button type="button" class="btn-tiny" style="background:var(--accent);color:#fff" onclick="openXuLyThung('${t.id_tram}')">📦 Xử lý thùng</button>` : ''}
+        <button type="button" class="btn-tiny" onclick="openNhapSL('${t.id_tram}')">+ SL</button>
+        <button type="button" class="btn-tiny" onclick="openSuaTram('${t.id_tram}')">Sửa</button>
+        <button type="button" class="btn-tiny" onclick="openDoiMa('${t.id_tram}')">Đổi SP</button>
+        <button type="button" class="btn-tiny" onclick="openInTem('${t.id_tram}')">In tem</button>
+        <button type="button" class="btn-tiny danger" onclick="ketThucTram('${t.id_tram}')">Kết thúc</button>
+      </td>
+    </tr>`;
+}
+
+function renderTramsLineMode(){
+  const tbody = document.getElementById('tramTbody');
+  const lbl = tramLabel();
+  const activeHtml = [];
+  const emptyHtml = [];
+  const seen = new Set();
+  lineCatalog.forEach(line => {
+    const t = trams.find(x => x.ten_tram === line);
+    if (t){ seen.add(t.id_tram); activeHtml.push(activeTramRowHtml(t, false)); return; }
+    emptyHtml.push(`
+      <tr>
+        <td style="color:var(--text-dim)">${escapeHtml(line)}</td>
+        <td colspan="7"><span style="color:#999">Chưa gán kế hoạch</span></td>
+        <td style="white-space:nowrap"><button type="button" class="btn-tiny gan-kh-btn" data-line="${escapeHtml(line)}">+ Gán kế hoạch</button></td>
+      </tr>`);
+  });
+  // Trạm không nằm trong danh mục line (dữ liệu cũ / tạo tay) — vẫn hiển thị để không mất.
+  trams.filter(t => !seen.has(t.id_tram)).forEach(t => activeHtml.push(activeTramRowHtml(t, false)));
+
+  const parts = [];
+  parts.push(`<tr class="tram-divider"><td colspan="10">${lbl} đang hoạt động (${activeHtml.length})</td></tr>`);
+  parts.push(activeHtml.length ? activeHtml.join('') : `<tr><td colspan="10" style="color:#999">Chưa có ${lbl.toLowerCase()} nào có kế hoạch trong ca này.</td></tr>`);
+  if (emptyHtml.length){
+    parts.push(`<tr class="tram-divider"><td colspan="10">${lbl} chưa có kế hoạch (${emptyHtml.length}) — bấm "Gán kế hoạch" để chọn mã SP từ KHSX tuần</td></tr>`);
+    parts.push(emptyHtml.join(''));
+  }
+  tbody.innerHTML = parts.join('');
+  tbody.querySelectorAll('.gan-kh-btn').forEach(btn => btn.addEventListener('click', () => openGanKeHoach(btn.dataset.line)));
+  updateSummary();
+}
+
+function renderTrams(){
+  if (isLineMode()) return renderTramsLineMode();
+  const tbody = document.getElementById('tramTbody');
+  const lbl = tramLabel().toLowerCase();
+  // Kế hoạch tuần (cd_khsx_tuan_plan, nhập ở khsx-tuan.html) hiển thị gộp
+  // ngay trong bảng này — chỉ những mã SP CHƯA có trạm nào đang chạy, để
+  // trưởng ca thấy "còn thiếu trạm cho mã nào" mà không phải xem 2 nơi.
+  const pendingPlan = planToday.filter(p => !trams.some(t => t.ma_sp === p.ma_sp && t.cong_doan === p.cong_doan));
+  const merged = congDoanGroup.length > 1;
+  const colspan = merged ? 10 : 9;
+  if (!trams.length && !pendingPlan.length){ tbody.innerHTML = '<tr class="empty-row"><td colspan="' + colspan + '">Chưa có ' + lbl + ' nào hoạt động trong ca này — bấm "+ Thêm ' + lbl + '".</td></tr>'; return; }
+  const cdCell = (cd) => merged ? `<td><span class="sub-cd-badge">${escapeHtml(cd)}</span></td>` : '';
+  const activeRows = trams.map(t => activeTramRowHtml(t, merged)).join('');
+  const planRows = pendingPlan.map(p => `
+    <tr style="opacity:.65;font-style:italic">
+      ${cdCell(p.cong_doan)}
+      <td><span style="color:#999">📋 Kế hoạch</span></td>
+      <td>${escapeHtml(p.ma_sp)}</td>
+      <td>${escapeHtml(p.ten_sp) || '<span style="color:#999">—</span>'}</td>
+      <td><span style="color:#999">—</span></td>
+      <td class="num">${fmtNum(p.khCa)}</td>
+      <td class="num">${fmtNum(p.khTuan)}</td>
+      <td class="num"><span style="color:#999">—</span></td>
+      <td class="num"><span style="color:#999">—</span></td>
+      <td style="white-space:nowrap">
+        <button type="button" class="btn-tiny khsx-add-tram-btn" data-ma-sp="${escapeHtml(p.ma_sp)}" data-ten-sp="${escapeHtml(p.ten_sp || '')}" data-kh-ca="${p.khCa}" data-cong-doan="${escapeHtml(p.cong_doan)}">+ Tạo ${lbl}</button>
+      </td>
+    </tr>`).join('');
+  tbody.innerHTML = activeRows + planRows;
+  tbody.querySelectorAll('.khsx-add-tram-btn').forEach(btn => btn.addEventListener('click', () => {
+    openAddTramFromKhsx(btn.dataset.maSp, btn.dataset.tenSp, Number(btn.dataset.khCa), btn.dataset.congDoan);
+  }));
+  updateSummary();
+}
+
+// Dòng "Tổng hợp CA HIỆN TẠI" — gộp KH/OK/NG mọi trạm/line đang hoạt động
+// trong ca đang chọn (giống dòng tổng hợp trên dashboard Đúc).
+function updateSummary(){
+  const list = trams || [];
+  const withKh = list.filter(t => t.kh_ca != null);
+  const tongKh = withKh.reduce((s,t) => s + (Number(t.kh_ca)||0), 0);
+  const tongOk = list.reduce((s,t) => s + (Number(t.so_luong_ok)||0), 0);
+  const tongNg = list.reduce((s,t) => s + (Number(t.so_luong_ng)||0), 0);
+  const tongNgSua = list.reduce((s,t) => s + (Number(t.so_luong_ng_sua)||0), 0);
+  const pct = tongKh > 0 ? Math.round(tongOk / tongKh * 100) : 0;
+  const ngRate = (tongOk + tongNg) > 0 ? (tongNg / (tongOk + tongNg) * 100) : 0;
+  const lineMode = isLineMode();
+  const tongLine = lineMode ? lineCatalog.length : list.length;
+  const dangChay = lineMode ? list.filter(t => lineCatalog.includes(t.ten_tram)).length : list.length;
+
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  set('sm-kh', fmtNum(tongKh));
+  set('sm-kh-sub', withKh.length + ' ' + (lineMode ? 'line' : 'trạm') + ' có KH');
+  set('sm-ok', fmtNum(tongOk));
+  set('sm-ok-sub', 'Cập nhật ' + new Date().toLocaleTimeString('vi-VN', { hour12: false }));
+  set('sm-ng', fmtNum(tongNg));
+  set('sm-ng-sub', tongNgSua > 0 ? '+' + fmtNum(tongNgSua) + ' chờ sửa' : '—');
+  set('sm-pct', tongKh > 0 ? pct + '%' : '—');
+  const pctEl = document.getElementById('sm-pct');
+  if (pctEl) pctEl.className = 'stat-value ' + (tongKh <= 0 ? '' : pct >= 80 ? 'run' : pct >= 40 ? 'warn' : 'alarm');
+  set('sm-ngrate', (tongOk + tongNg) > 0 ? ngRate.toFixed(1) + '%' : '—');
+  const ngrEl = document.getElementById('sm-ngrate');
+  if (ngrEl) ngrEl.className = 'stat-value ' + ((tongOk + tongNg) <= 0 ? '' : ngRate >= 5 ? 'alarm' : ngRate >= 2 ? 'warn' : 'run');
+  set('sm-run-label', lineMode ? 'Line đang chạy' : 'Trạm đang chạy');
+  set('sm-run', dangChay + (lineMode ? ' / ' + tongLine : ''));
+  set('sm-run-sub', lineMode && tongLine > 0 ? 'Tỷ lệ vận hành ' + Math.round(dangChay / tongLine * 100) + '%' : (dangChay + ' đang hoạt động'));
+}
+
+function findTram(id){ return trams.find(t => t.id_tram === id); }
+
+/* ---------- + Thêm trạm/line/máy/bàn kiểm ---------- */
+function resetAddTramExtras(){
+  ganKeHoachLine = null;
+  document.getElementById('at-khsx-wrap').style.display = 'none';
+  document.getElementById('at-khtuan-wrap').style.display = 'none';
+  document.getElementById('at-khtuan').value = '';
+  document.getElementById('at-ten').readOnly = false;
+  document.getElementById('at-nguoi').setAttribute('list', 'dlNhanVien');
+  document.getElementById('at-nguoi-hint').textContent = '';
+  document.getElementById('lbl-at-khca').textContent = 'KH ca (pcs) — mốc tham khảo tiến độ, không bắt buộc';
+}
+document.getElementById('btnAddTram').addEventListener('click', () => {
+  resetAddTramExtras();
+  document.getElementById('addTramTitle').textContent = '+ Thêm ' + tramLabel();
+  document.getElementById('at-ten').value = '';
+  document.getElementById('at-masp').value = '';
+  document.getElementById('at-tensp').value = '';
+  document.getElementById('at-khca').value = '';
+  document.getElementById('at-nguoi').value = '';
+  if (congDoanGroup.length > 1) document.getElementById('at-congdoan').value = congDoan;
+  openModal('modalAddTram');
+});
+document.getElementById('btnSubmitAddTram').addEventListener('click', async () => {
+  const ten = document.getElementById('at-ten').value.trim();
+  const masp = document.getElementById('at-masp').value.trim();
+  if (!ten) return showMsg('Chưa nhập tên ' + tramLabel().toLowerCase() + '.', 'err');
+  if (!masp) return showMsg('Chưa nhập mã SP.', 'err');
+  const khCaRaw = document.getElementById('at-khca').value;
+  const khTuanRaw = document.getElementById('at-khtuan').value;
+  if (ganKeHoachLine && khCaRaw === '') return showMsg('KH ca là bắt buộc khi gán kế hoạch cho line.', 'err');
+  const congDoanRow = congDoanGroup.length > 1 ? document.getElementById('at-congdoan').value : congDoan;
+  const session = await MesAuth.getSession();
+  if (!session) return requireLogin();
+  const { error } = await sb.rpc('cd_tram_tao', {
+    p_ngay: document.getElementById('ngay').value, p_ca: document.getElementById('ca').value, p_cong_doan: congDoanRow,
+    p_ten_tram: ten, p_ma_sp: masp, p_ten_sp: document.getElementById('at-tensp').value.trim(),
+    p_kh_ca: khCaRaw === '' ? null : Number(khCaRaw),
+    p_kh_tuan: khTuanRaw === '' ? null : Number(khTuanRaw),
+    p_nguoi: document.getElementById('at-nguoi').value.trim(), p_user: await MesAuth.getCurrentUserIdentity(),
+  });
+  if (error) return showMsg('Lỗi: ' + error.message, 'err');
+  closeModal('modalAddTram');
+  showMsg('✅ Đã ' + (ganKeHoachLine ? 'gán kế hoạch cho ' : 'thêm ') + ten, 'ok');
+  loadTrams();
+});
+
+/* ---------- Chép line từ ca trước sang (line mode) ---------- */
+document.getElementById('btnChepLine').addEventListener('click', async () => {
+  const ngay = document.getElementById('ngay').value;
+  const ca = document.getElementById('ca').value;
+  if (!ngay || !ca) return showMsg('Chọn ngày và ca trước.', 'err');
+  const lbl = tramLabel().toLowerCase();
+  if (!confirm('Chép các ' + lbl + ' đang chạy dở từ ca gần nhất sang ' + ca + ' ngày ' +
+      ngay.split('-').reverse().join('/') + '?\n\n' +
+      '• Nguyên mã SP / KH ca / người thao tác.\n' +
+      '• Sản lượng OK/NG bắt đầu lại từ 0.\n' +
+      '• ' + tramLabel() + ' đã có trong ca này được giữ nguyên, không đè.\n' +
+      '• Ca nguồn không bị đụng — vẫn phải kết ca ca đó cho đúng báo cáo.')) return;
+  const session = await MesAuth.getSession();
+  if (!session) return requireLogin();
+  const btn = document.getElementById('btnChepLine');
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('cd_chep_line_tu_ca_truoc', {
+    p_ngay: ngay, p_ca: ca, p_cong_doan: congDoan, p_user: await MesAuth.getCurrentUserIdentity(),
+  });
+  btn.disabled = false;
+  if (error) return showMsg('Lỗi: ' + error.message, 'err');
+  if (!data || data.ok === false) {
+    return showMsg('Không có ca nào trong 7 ngày gần đây còn ' + lbl + ' để chép. ' +
+      'Nếu bắt đầu ca mới, dùng "⚡ Nạp kế hoạch từ KHSX tuần".', 'err');
+  }
+  const src = (data.src_ngay || '').split('-').reverse().join('/');
+  showMsg('✅ Đã chép ' + data.copied + ' ' + lbl + ' từ ' + data.src_ca + ' ' + src +
+    (data.skipped ? ' (' + data.skipped + ' đã có sẵn, bỏ qua)' : '') + '.', 'ok');
+  loadTrams();
+});
+
+/* ---------- + Nhập SL ---------- */
+function openNhapSL(id){
+  currentTarget = id;
+  const t = findTram(id);
+  document.getElementById('ns-tram-label').textContent = t ? '(' + t.ten_tram + ' — ' + t.ma_sp + ')' : '';
+  document.getElementById('ns-ok').value = 0;
+  document.getElementById('ns-ng').value = 0;
+  document.getElementById('ns-ghichu').value = '';
+  openModal('modalNhapSL');
+}
+document.getElementById('btnSubmitNhapSL').addEventListener('click', async () => {
+  const ok = Number(document.getElementById('ns-ok').value) || 0;
+  const ng = Number(document.getElementById('ns-ng').value) || 0;
+  const ghiChu = document.getElementById('ns-ghichu').value.trim();
+  if (ok <= 0 && ng <= 0) return showMsg('Phải nhập số OK hoặc NG lớn hơn 0.', 'err');
+  if (ng > 0 && !ghiChu) return showMsg('Có NG thì bắt buộc nhập ghi chú lý do.', 'err');
+  const session = await MesAuth.getSession();
+  if (!session) return requireLogin();
+  const { error } = await sb.rpc('cd_tram_nhap_sanluong', {
+    p_id_tram: currentTarget, p_them_ok: ok, p_them_ng: ng, p_ghi_chu: ghiChu, p_user: await MesAuth.getCurrentUserIdentity(),
+  });
+  if (error) return showMsg('Lỗi: ' + error.message, 'err');
+  closeModal('modalNhapSL');
+  showMsg('✅ Đã nhập sản lượng', 'ok');
+  loadTrams();
+});
+
+/* ---------- Sửa (người thao tác / KH ca) ---------- */
+function openSuaTram(id){
+  currentTarget = id;
+  const t = findTram(id);
+  document.getElementById('st-tram-label').textContent = t ? '(' + t.ten_tram + ' — ' + t.ma_sp + ')' : '';
+  document.getElementById('st-nguoi').value = t ? (t.nguoi_thao_tac || '') : '';
+  document.getElementById('st-khca').value = t && t.kh_ca != null ? t.kh_ca : '';
+
+  // Line mode: người kiểm tra chỉ gợi ý nhân viên bộ phận này được phép thao
+  // tác trên đúng line đó (vẫn gõ tay tên khác được).
+  const lineMode = isLineMode() && t && lineCatalog.includes(t.ten_tram);
+  const hint = document.getElementById('st-nguoi-hint');
+  if (lineMode){
+    const ds = nguoiChoLine(t.ten_tram);
+    document.getElementById('st-nguoi').setAttribute('list', 'dlNguoiLine');
+    document.getElementById('dlNguoiLine').innerHTML = ds.map(n => `<option value="${escapeHtml(n)}">`).join('');
+    hint.textContent = ds.length ? ' (' + ds.length + ' người được phép thao tác ' + t.ten_tram + ')' : ' Chưa gán nhân viên nào cho ' + t.ten_tram + '.';
+  } else {
+    document.getElementById('st-nguoi').setAttribute('list', 'dlNhanVien');
+    hint.textContent = '';
+  }
+  openModal('modalSuaTram');
+}
+document.getElementById('btnSubmitSuaTram').addEventListener('click', async () => {
+  const nguoi = document.getElementById('st-nguoi').value.trim();
+  const khCaRaw = document.getElementById('st-khca').value;
+  const session = await MesAuth.getSession();
+  if (!session) return requireLogin();
+  const { error } = await sb.rpc('cd_tram_sua', {
+    p_id_tram: currentTarget, p_nguoi_moi: nguoi, p_kh_ca_moi: khCaRaw === '' ? null : Number(khCaRaw), p_user: await MesAuth.getCurrentUserIdentity(),
+  });
+  if (error) return showMsg('Lỗi: ' + error.message, 'err');
+  closeModal('modalSuaTram');
+  showMsg('✅ Đã lưu', 'ok');
+  loadTrams();
+});
+
+/* ---------- Đổi mã SP ---------- */
+function openDoiMa(id){
+  currentTarget = id;
+  const t = findTram(id);
+  document.getElementById('dm-tram-label').textContent = t ? '(' + t.ten_tram + ')' : '';
+  document.getElementById('dm-masp').value = '';
+  document.getElementById('dm-tensp').value = '';
+  document.getElementById('dm-khca').value = t && t.kh_ca != null ? t.kh_ca : '';
+  document.getElementById('dm-khtuan').value = t && t.kh_tuan != null ? t.kh_tuan : '';
+  document.getElementById('dm-nguoi').value = '';
+
+  const lineMode = isLineMode() && t && lineCatalog.includes(t.ten_tram);
+  document.getElementById('dm-khtuan-wrap').style.display = lineMode ? '' : 'none';
+  document.getElementById('lbl-dm-khca').textContent = lineMode ? 'KH ca (pcs) — bắt buộc' : 'KH ca (pcs) — không bắt buộc';
+
+  const pickWrap = document.getElementById('dm-khsx-wrap');
+  const pick = document.getElementById('dm-khsx-pick');
+  if (lineMode){
+    const avail = planToday.filter(p => !trams.some(x => x.id_tram !== currentTarget && x.ma_sp === p.ma_sp));
+    pick.innerHTML = '<option value="">— Nhập tay —</option>' +
+      avail.map((p, i) => `<option value="${i}">${escapeHtml(p.ma_sp)} — ${escapeHtml(p.ten_sp || '')} · KH ca ${fmtNum(p.khCa)} · KH tuần ${fmtNum(p.khTuan)}</option>`).join('');
+    pick._avail = avail;
+    pickWrap.style.display = avail.length ? '' : 'none';
+    const ds = nguoiChoLine(t.ten_tram);
+    document.getElementById('dm-nguoi').setAttribute('list', 'dlNguoiLine');
+    document.getElementById('dlNguoiLine').innerHTML = ds.map(n => `<option value="${escapeHtml(n)}">`).join('');
+    document.getElementById('dm-nguoi-hint').textContent = ds.length ? ' (' + ds.length + ' người được phép thao tác ' + t.ten_tram + ')' : '';
+  } else {
+    pickWrap.style.display = 'none';
+    document.getElementById('dm-nguoi').setAttribute('list', 'dlNhanVien');
+    document.getElementById('dm-nguoi-hint').textContent = '';
+  }
+  openModal('modalDoiMa');
+}
+document.getElementById('dm-khsx-pick').addEventListener('change', (e) => {
+  const p = (e.target._avail || [])[Number(e.target.value)];
+  if (!p) return;
+  document.getElementById('dm-masp').value = p.ma_sp;
+  document.getElementById('dm-tensp').value = p.ten_sp || '';
+  document.getElementById('dm-khca').value = p.khCa || '';
+  document.getElementById('dm-khtuan').value = p.khTuan || '';
+});
+document.getElementById('btnSubmitDoiMa').addEventListener('click', async () => {
+  const masp = document.getElementById('dm-masp').value.trim();
+  if (!masp) return showMsg('Chưa nhập mã SP mới.', 'err');
+  const khCaRaw = document.getElementById('dm-khca').value;
+  const khTuanRaw = document.getElementById('dm-khtuan').value;
+  const t = findTram(currentTarget);
+  const lineMode = isLineMode() && t && lineCatalog.includes(t.ten_tram);
+  if (lineMode && khCaRaw === '') return showMsg('KH ca là bắt buộc khi đổi SP cho line.', 'err');
+  const session = await MesAuth.getSession();
+  if (!session) return requireLogin();
+  const { error } = await sb.rpc('cd_tram_doi_ma_sp', {
+    p_id_tram: currentTarget, p_ma_sp_moi: masp, p_ten_sp_moi: document.getElementById('dm-tensp').value.trim(),
+    p_kh_ca_moi: khCaRaw === '' ? null : Number(khCaRaw),
+    p_kh_tuan_moi: khTuanRaw === '' ? null : Number(khTuanRaw),
+    p_nguoi_moi: document.getElementById('dm-nguoi').value.trim(), p_user: await MesAuth.getCurrentUserIdentity(),
+  });
+  if (error) return showMsg('Lỗi: ' + error.message, 'err');
+  closeModal('modalDoiMa');
+  showMsg('✅ Đã đổi mã SP — sản lượng cũ đã gộp vào báo cáo', 'ok');
+  loadTrams();
+});
+
+/* ---------- Kết thúc trạm/line/máy/bàn kiểm ---------- */
+async function ketThucTram(id){
+  const t = findTram(id);
+  if (!confirm('Kết thúc "' + (t ? t.ten_tram : id) + '"? Sản lượng hiện tại sẽ được gộp vào báo cáo.')) return;
+  const session = await MesAuth.getSession();
+  if (!session) return requireLogin();
+  const { error } = await sb.rpc('cd_tram_ket_thuc', { p_id_tram: id, p_user: await MesAuth.getCurrentUserIdentity() });
+  if (error) return showMsg('Lỗi: ' + error.message, 'err');
+  showMsg('✅ Đã kết thúc ' + (t ? t.ten_tram : ''), 'ok');
+  loadTrams();
+}
+
+/* ---------- Kết ca ---------- */
+document.getElementById('btnKetCa').addEventListener('click', async () => {
+  const ngay = document.getElementById('ngay').value, ca = document.getElementById('ca').value;
+  if (!ngay || !ca) return showMsg('Chọn ngày/ca trước.', 'err');
+  const congDoanLabel = congDoanGroup.length > 1 ? congDoan + ' (gồm ' + congDoanGroup.slice(1).join(', ') + ')' : congDoan;
+  if (!confirm('Kết ca ' + ca + ' ngày ' + ngay.split('-').reverse().join('/') + ' cho ' + congDoanLabel + '? Toàn bộ ' + tramLabel().toLowerCase() + ' đang hoạt động sẽ được gộp vào báo cáo và xoá khỏi màn hình.')) return;
+  const session = await MesAuth.getSession();
+  if (!session) return requireLogin();
+  const user = await MesAuth.getCurrentUserIdentity();
+  // Trang gộp nhiều cong_doan (VD Gia Công + Cắt viền) — mỗi cái vẫn là 1
+  // dòng riêng trong DB nên kết ca lần lượt từng cong_doan rồi gộp báo cáo.
+  let allRows = []; const fail = [];
+  for (const cd of congDoanGroup){
+    const { data, error } = await sb.rpc('cd_ket_ca_cong_doan', { p_ngay: ngay, p_ca: ca, p_cong_doan: cd, p_user: user });
+    if (error) fail.push(cd + ': ' + error.message); else allRows = allRows.concat(data || []);
+  }
+  if (fail.length) return showMsg('Lỗi: ' + fail.join('; '), 'err');
+  showReport(allRows);
+  loadTrams();
+});
+
+function showReport(rows){
+  const tbody = document.getElementById('reportTbody');
+  if (!rows.length){ tbody.innerHTML = '<tr class="empty-row"><td colspan="7">Không có dữ liệu.</td></tr>'; }
+  else {
+    tbody.innerHTML = rows.map(r => {
+      const ngSua = Number(r.so_luong_ng_sua) || 0;
+      const total = Number(r.so_luong_ok) + Number(r.so_luong_ng) + ngSua;
+      const pct = total > 0 ? ((Number(r.so_luong_ng) + ngSua) / total * 100).toFixed(1) : '0.0';
+      return '<tr>' +
+        '<td>' + escapeHtml(r.ma_sp) + '</td><td>' + escapeHtml(r.ten_sp || '') + '</td>' +
+        '<td class="num">' + fmtNum(r.so_luong_nhan_vao) + '</td>' +
+        '<td class="num" style="color:#1a7a3a">' + fmtNum(r.so_luong_ok) + '</td>' +
+        '<td class="num" style="color:#c00">' + fmtNum(r.so_luong_ng) + '</td>' +
+        '<td class="num" style="color:var(--warn-fg)">' + fmtNum(ngSua) + '</td>' +
+        '<td class="num">' + pct + '%</td></tr>';
+    }).join('');
+  }
+  openModal('modalReport');
+}
+
+/* ---------- Hàng đang chờ tại công đoạn (tham khảo, không link cứng) ------- */
+async function loadWaiting(){
+  const el = document.getElementById('waitingList');
+  el.innerHTML = '<div class="empty">Đang tải...</div>';
+  const { data: positions, error } = await sb.from('cd_v_vi_tri_hien_tai').select('tag_no').in('vi_tri_hien_tai', congDoanGroup);
+  if (error){ el.innerHTML = '<div class="empty">Lỗi: ' + escapeHtml(error.message) + '</div>'; return; }
+  if (!positions || !positions.length){ el.innerHTML = '<div class="empty">Chưa có hàng nào chuyển đến công đoạn này.</div>'; return; }
+  const tags = positions.map(p => p.tag_no);
+  const { data: tems } = await sb.from('duc_tem').select('tag_no,ma_sp,ten_sp,so_luong,ngay').in('tag_no', tags).gt('so_luong', 0).order('ngay');
+  if (!tems || !tems.length){ el.innerHTML = '<div class="empty">Hàng tại đây đã được đóng gói/xử lý hết.</div>'; return; }
+  el.innerHTML = tems.map(t => `
+    <div class="waiting-item">
+      <span><b>${escapeHtml(t.tag_no)}</b> — ${escapeHtml(t.ma_sp)} ${escapeHtml(t.ten_sp || '')}</span>
+      <span>${fmtNum(t.so_luong)} sp · ${t.ngay ? String(t.ngay).split('-').reverse().join('/') : ''}</span>
+    </div>`).join('');
+}
+
+/* ---------- Kế hoạch sản xuất hôm nay (theo KHSX tuần) — cd_khsx_tuan_plan,
+   nhập/sửa ở khsx-tuan.html (tab theo công đoạn). Gộp thẳng vào bảng
+   "Trạm đang hoạt động" (xem renderTrams — mã SP nào chưa có trạm nào chạy
+   thì hiện dòng "📋 Kế hoạch" tại vị trí cột KH ca, kèm nút tạo trạm nhanh).
+   Chỉ để trưởng ca tham khảo/tạo nhanh, KHÔNG tự tạo trạm thay hay link
+   cứng vào tem — đúng quyết định kiến trúc T3 (2 lớp tách biệt trạm và
+   truy xuất tem). ---------- */
+// Bavia/Sơn/OQC hiện chỉ tổ chức làm "Ca ngày" (+ tăng ca/OT gộp luôn vào
+// ca ngày đó) — CHƯA bố trí ca đêm. Nên KH ngày của kế hoạch tuần phải đổ
+// nguyên vẹn vào "Ca ngày" (không chia đôi như công đoạn chạy đủ 2 ca), và
+// không gợi ý kế hoạch nào cho "Ca đêm" (chưa có ai làm ca đó, gợi ý sẽ sai).
+// Gia Công hiện vẫn tổ chức đủ 2 ca nên giữ nguyên cách chia đôi cũ.
+// Khi công ty mở rộng, bố trí thêm ca đêm cho Bavia/Sơn/OQC — chỉ cần bỏ
+// công đoạn đó khỏi CONG_DOAN_MOT_CA để quay lại chia đôi theo 2 ca như
+// Gia Công, KHÔNG cần đổi gì khác ở cd_khsx_tuan_plan/khsx-tuan.html.
+const CONG_DOAN_MOT_CA = ['Bavia', 'Sơn', 'OQC'];
+
+function mondayOfKhsx(dateStr){
+  const d = new Date(dateStr + 'T00:00:00');
+  const jsDay = d.getDay();   // 0=CN..6=T7
+  const monday = new Date(d);
+  monday.setDate(monday.getDate() + (jsDay === 0 ? -6 : 1 - jsDay));
+  return monday.getFullYear() + '-' + String(monday.getMonth() + 1).padStart(2, '0') + '-' + String(monday.getDate()).padStart(2, '0');
+}
+async function loadKhsxToday(){
+  const ngay = document.getElementById('ngay').value;
+  const ca = document.getElementById('ca').value;
+  if (!ngay) return;
+
+  const motCa = CONG_DOAN_MOT_CA.includes(congDoan);
+  if (motCa && ca && ca !== 'Ca ngày'){
+    // Công đoạn này chưa bố trí ca đêm/ca khác — không có kế hoạch để gợi ý.
+    planToday = [];
+    renderTrams();
+    return;
+  }
+
+  const dayCols = ['t2', 't3', 't4', 't5', 't6', 't7', 'cn'];
+  const d = new Date(ngay + 'T00:00:00');
+  const jsDay = d.getDay();
+  const dayCol = dayCols[jsDay === 0 ? 6 : jsDay - 1];
+  const { data, error } = await sb.from('cd_khsx_tuan_plan')
+    .select('ma_sp,ten_sp,cong_doan,kh_tuan,' + dayCol)
+    .eq('tuan_bat_dau', mondayOfKhsx(ngay)).in('cong_doan', congDoanGroup);
+  if (error){ console.error('loadKhsxToday lỗi:', error.message); return; }
+  planToday = (data || [])
+    .filter(r => Number(r[dayCol]) > 0)
+    .map(r => ({ ma_sp: r.ma_sp, ten_sp: r.ten_sp, cong_doan: r.cong_doan, khCa: motCa ? Number(r[dayCol]) : Math.round(Number(r[dayCol]) / 2), khTuan: Number(r.kh_tuan) || 0 }))
+    .sort((a, b) => a.ma_sp.localeCompare(b.ma_sp, 'vi'));
+  renderTrams();
+}
+function openAddTramFromKhsx(maSp, tenSp, khCa, congDoanSub){
+  resetAddTramExtras();
+  document.getElementById('addTramTitle').textContent = '+ Thêm ' + tramLabel();
+  document.getElementById('at-ten').value = '';
+  document.getElementById('at-masp').value = maSp;
+  document.getElementById('at-tensp').value = tenSp;
+  document.getElementById('at-khca').value = khCa || '';
+  document.getElementById('at-nguoi').value = '';
+  if (congDoanGroup.length > 1) document.getElementById('at-congdoan').value = congDoanSub || congDoan;
+  openModal('modalAddTram');
+  document.getElementById('at-ten').focus();
+}
+
+// Line mode: bấm "Gán kế hoạch" ở 1 Line trống. KH ca + KH tuần link tự động
+// từ KHSX tuần của bộ phận; người kiểm tra chỉ chọn trong nhân viên bộ phận
+// này được phép thao tác trên đúng line đó.
+let ganKeHoachLine = null;
+function openGanKeHoach(line){
+  ganKeHoachLine = line;
+  document.getElementById('addTramTitle').textContent = 'Gán kế hoạch cho ' + line;
+  document.getElementById('at-ten').value = line;
+  document.getElementById('at-ten').readOnly = true;
+  document.getElementById('at-masp').value = '';
+  document.getElementById('at-tensp').value = '';
+  document.getElementById('at-khca').value = '';
+  document.getElementById('at-khtuan').value = '';
+  document.getElementById('at-nguoi').value = '';
+  document.getElementById('at-khtuan-wrap').style.display = '';
+  document.getElementById('lbl-at-khca').textContent = 'KH ca (pcs) — bắt buộc';
+
+  // Người kiểm tra: lọc theo line
+  const ds = nguoiChoLine(line);
+  document.getElementById('at-nguoi').setAttribute('list', 'dlNguoiLine');
+  document.getElementById('dlNguoiLine').innerHTML = ds.map(n => `<option value="${escapeHtml(n)}">`).join('');
+  document.getElementById('at-nguoi-hint').textContent = ds.length
+    ? ' (' + ds.length + ' người được phép thao tác ' + line + ')'
+    : ' Chưa gán nhân viên nào cho ' + line + ' — khai ở Danh mục nhân sự.';
+
+  const wrap = document.getElementById('at-khsx-wrap');
+  const sel = document.getElementById('at-khsx-pick');
+  const avail = planToday.filter(p => !trams.some(t => t.ma_sp === p.ma_sp));
+  sel.innerHTML = '<option value="">— Nhập tay —</option>' +
+    avail.map((p, i) => `<option value="${i}">${escapeHtml(p.ma_sp)} — ${escapeHtml(p.ten_sp || '')} · KH ca ${fmtNum(p.khCa)} · KH tuần ${fmtNum(p.khTuan)}</option>`).join('');
+  sel._avail = avail;
+  wrap.style.display = avail.length ? '' : 'none';
+
+  openModal('modalAddTram');
+}
+document.getElementById('at-khsx-pick').addEventListener('change', (e) => {
+  const avail = e.target._avail || [];
+  const p = avail[Number(e.target.value)];
+  if (!p) return;
+  document.getElementById('at-masp').value = p.ma_sp;
+  document.getElementById('at-tensp').value = p.ten_sp || '';
+  document.getElementById('at-khca').value = p.khCa || '';
+  document.getElementById('at-khtuan').value = p.khTuan || '';
+});
+// Khi gõ/đổi mã SP trong modal gán kế hoạch: tự khớp KH ca/KH tuần từ KHSX tuần.
+document.getElementById('at-masp').addEventListener('input', () => {
+  if (!ganKeHoachLine) return;
+  const p = planToday.find(x => x.ma_sp === document.getElementById('at-masp').value.trim());
+  if (p){
+    document.getElementById('at-khca').value = p.khCa || '';
+    document.getElementById('at-khtuan').value = p.khTuan || '';
+  }
+});
+
+// In tem = mở luồng "Đóng gói lại" (tách / gộp tem đang sản xuất) ở
+// chuyencongdoan.html, đã chọn sẵn công đoạn + ngày/ca.
+function openInTem(idTram){
+  const t = findTram(idTram);
+  const p = new URLSearchParams({
+    tab: 'pack', dept: congDoan,
+    ngay: document.getElementById('ngay').value,
+    ca: document.getElementById('ca').value,
+  });
+  if (t){
+    p.set('tram', t.id_tram);
+    p.set('masp', t.ma_sp);
+    if (t.nguoi_thao_tac) p.set('nguoi', t.nguoi_thao_tac);
+  }
+  window.open('chuyencongdoan.html?' + p.toString(), '_blank', 'noopener');
+}
+
+/* ========== In tem A6 (dùng lại renderer của intem.html) ================= */
+function svgEsc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function buildQrRects(dataStr, sizeMm, bgColor, fgColor){
+  var qr = qrcode(0, 'M'); qr.addData(dataStr); qr.make();
+  var n = qr.getModuleCount(), cell = sizeMm / n;
+  var out = '<rect x="0" y="0" width="'+sizeMm+'" height="'+sizeMm+'" fill="'+bgColor+'"/>';
+  for (var r=0; r<n; r++) for (var c=0; c<n; c++) if (qr.isDark(r,c))
+    out += '<rect x="'+(c*cell).toFixed(3)+'" y="'+(r*cell).toFixed(3)+'" width="'+cell.toFixed(3)+'" height="'+cell.toFixed(3)+'" fill="'+fgColor+'"/>';
+  return out;
+}
+function buildLabelSvg(d){
+  var W=72, H=100, PW=105, PH=148;                 // khổ A6 dọc — giống intem.html
+  var scale = Math.min(PW/W, PH/H), offX=(PW-W*scale)/2, offY=(PH-H*scale)/2;
+  var bg='#ffffff', fg='#000000';
+  var rows = [
+    {lbl:'Mã sản phẩm', val:d.maSP, big:true}, {lbl:'Tên sản phẩm', val:d.tenSP, big:true},
+    {lbl:'Tag No', val:d.tagNo}, {lbl:'Số lượng', val:d.soLuong}, {lbl:'Người thao tác', val:d.nguoiTT},
+    {lbl:'Ngày sản xuất', val:d.lotNo}, {lbl:'Số khuôn', val:d.soKhuon}, {lbl:'Nguyên liệu', val:d.nguyenLieu},
+    {lbl:'Máy đúc', val:d.mayDuc}, {lbl:'Ghi chú', val:d.ghiChu}
+  ];
+  var rowStartY=17.5, rowH=3.9, rowsEndY=rowStartY+(rows.length-1)*rowH;
+  var qrSize=34, qrX=(W-qrSize)/2, qrY=rowsEndY+5, ftrLineY=qrY+qrSize+2, ftrTextY=ftrLineY+2.8;
+  var svg = '<svg viewBox="0 0 '+PW+' '+PH+'" width="'+PW+'mm" height="'+PH+'mm" xmlns="http://www.w3.org/2000/svg">';
+  svg += '<rect x="0" y="0" width="'+PW+'" height="'+PH+'" fill="'+bg+'"/>';
+  svg += '<g transform="translate('+offX.toFixed(3)+','+offY.toFixed(3)+') scale('+scale.toFixed(4)+')">';
+  svg += '<text x="4" y="9.6" font-family="Arial,Helvetica,sans-serif" font-size="6.2" font-weight="bold" fill="'+fg+'">TEM THÀNH PHẨM BAVIA</text>';
+  svg += '<line x1="4" y1="13.5" x2="'+(W-4)+'" y2="13.5" stroke="'+fg+'" stroke-width="0.3"/>';
+  rows.forEach(function(r,i){
+    var y = rowStartY + i*rowH, lblSize = r.big?3.0:2.6, valSize = r.big?3.9:3.0;
+    var vLen = String(r.val||'').length; if (vLen>26) valSize-=0.5; if (vLen>40) valSize-=0.5;
+    svg += '<text x="5" y="'+y.toFixed(2)+'" font-family="Arial,Helvetica,sans-serif" font-size="'+lblSize+'" font-weight="bold" fill="'+fg+'">'+svgEsc(r.lbl)+'</text>';
+    svg += '<text x="27" y="'+y.toFixed(2)+'" font-family="Arial,Helvetica,sans-serif" font-size="'+valSize+'" font-weight="bold" fill="'+fg+'">'+svgEsc(r.val)+'</text>';
+  });
+  svg += '<g transform="translate('+qrX+','+qrY+')">'+buildQrRects(d.qr, qrSize, '#ffffff', '#000000')+'</g>';
+  svg += '<line x1="4" y1="'+ftrLineY+'" x2="'+(W-4)+'" y2="'+ftrLineY+'" stroke="'+fg+'" stroke-width="0.3"/>';
+  svg += '<text x="'+(W/2)+'" y="'+ftrTextY+'" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="2.4" font-weight="bold" fill="'+fg+'">CÔNG TY CỔ PHẦN CÔNG NGHIỆP TOYOTAKI</text>';
+  svg += '</g></svg>';
+  return svg;
+}
+async function printTkbTems(tags){
+  if (!tags || !tags.length) return;
+  if (typeof qrcode === 'undefined') return showMsg('Chưa tải được thư viện QR — tải lại trang.', 'err');
+  const { data, error } = await sb.from('duc_tem')
+    .select('tag_no,ten_sp,ma_sp,so_luong,ngay,lot,so_khuon,nguyen_lieu,may_duc_chi_thi,nguoi_tt,ghi_chu')
+    .in('tag_no', tags);
+  if (error || !data || !data.length) return showMsg('Không tải được tem để in.', 'err');
+  const byTag = {}; data.forEach(r => byTag[r.tag_no] = r);
+  const pages = tags.map(tag => byTag[tag]).filter(Boolean).map(r => {
+    const p = String(r.ngay || '').split('-');
+    const ngayQR = p.length === 3 ? p.join('/') : (r.ngay || '');
+    const ngayHT = p.length === 3 ? (p[2]+'/'+p[1]+'/'+p[0]) : (r.ngay || '');
+    const lotNo = r.lot || ngayHT;
+    const qr = [r.tag_no, r.ten_sp, r.ma_sp, r.so_luong, ngayQR, lotNo, r.so_khuon, r.nguyen_lieu, r.may_duc_chi_thi].join('>\n');
+    const svg = buildLabelSvg({
+      tagNo: r.tag_no, qr, tenSP: r.ten_sp, maSP: r.ma_sp, soLuong: r.so_luong,
+      lotNo, soKhuon: r.so_khuon || '', nguyenLieu: r.nguyen_lieu || '',
+      mayDuc: r.may_duc_chi_thi || '', nguoiTT: r.nguoi_tt || '', ghiChu: r.ghi_chu || '',
+    });
+    return '<div class="page">' + svg + '</div>';
+  });
+  const css = [
+    '@page{size:105mm 148mm;margin:0}',
+    '*{margin:0;padding:0;box-sizing:border-box}',
+    'html,body{background:#fff}',
+    '.page{width:105mm;height:148mm;page-break-after:always;overflow:hidden}',
+    '.page svg{display:block;width:105mm;height:148mm}',
+    '.pbtn{position:fixed;bottom:14px;right:14px;background:#0F5FA5;color:#fff;border:none;border-radius:8px;padding:9px 18px;font-size:13px;font-weight:bold;cursor:pointer}',
+    '@media print{.pbtn{display:none}}',
+  ].join('');
+  const html = '<!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Tem TKB (' + tags.length + ')</title><style>' + css + '</style></head><body>'
+    + pages.join('')
+    + '<button class="pbtn" onclick="window.print()">🖨 In ngay</button>'
+    + '<' + 'script>setTimeout(function(){window.print();},250);<' + '/script>'
+    + '</body></html>';
+  // Mở qua <a target=_blank> từ chính user-gesture → ít bị chặn popup hơn window.open.
+  try {
+    const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+    const a = document.createElement('a');
+    a.href = url; a.target = '_blank'; a.rel = 'noopener';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (e) {
+    const w = window.open('', '_blank', 'width=460,height=760,scrollbars=yes');
+    if (!w) return showMsg('Trình duyệt chặn cửa sổ in — cho phép popup cho trang này rồi bấm "In" lại.', 'err');
+    w.document.open(); w.document.write(html); w.document.close();
+  }
+}
+
+/* ========== Bộ mã lỗi NG (khai báo chủng loại) ========================== */
+const NG_CODES = [
+  ['A','Rỗ khí'],['B','Thiếu nhôm bề mặt'],['C','Lõm pin'],['D','Biến dạng'],['E','Dính dầu'],
+  ['F','Nhăn'],['G','Bẩn nhôm'],['H','Va đập'],['I','Rạn nứt'],['J','Sản phẩm rơi'],
+  ['K','NG kích thước'],['L','Thiếu nhôm cạnh răng'],['M','Mờ lot mark'],['N','Ba trấu'],['O','Bề lõm sâu'],
+  ['P','Dính nhôm'],['Q','Bong nhôm'],['R','Tạp chất'],['S','Xước bề mặt'],['T','Mỏng cuống'],
+  ['V','Phồng nhôm'],['W','Lỗi, lõm'],['X','Khác (ghi rõ nguyên nhân)'],
+];
+const NG_CODE_MAP = Object.fromEntries(NG_CODES);
+const NG_REF_HTML = NG_CODES.map(([k, v]) => `<b>${k}</b> ${escapeHtml(v)}`).join(' &nbsp;·&nbsp; ');
+
+// "5V, 4M, 2X-nứt" -> tổng số lượng ghi được (chỉ để đối chiếu, không bắt buộc khớp).
+function parseNgShorthand(text){
+  let sum = 0;
+  (String(text).match(/(\d+)\s*([A-Za-z])/g) || []).forEach(tok => {
+    sum += Number(tok.match(/\d+/)[0]) || 0;
+  });
+  return sum;
+}
+// Gợi ý sống dưới ô nội dung NG.
+function wireNgLySum(prefix){
+  const inp = document.getElementById(prefix + '-ngly');
+  const out = document.getElementById(prefix + '-ngly-sum');
+  const target = () => {
+    if (prefix === 'xlt') return (Number(document.getElementById('xlt-ngphe').value) || 0) + (Number(document.getElementById('xlt-ngsua').value) || 0);
+    return Number(document.getElementById('sh-ngphe').value) || 0;
+  };
+  const upd = () => {
+    const s = parseNgShorthand(inp.value);
+    if (!inp.value.trim()){ out.textContent = ''; return; }
+    const t = target();
+    out.textContent = '= ' + s + ' sp' + (t > 0 && s !== t ? ' (NG khai ' + t + ' — chưa khớp)' : '');
+    out.style.color = (t > 0 && s !== t) ? 'var(--warn-fg)' : '#999';
+  };
+  inp.oninput = upd;
+  upd();
+}
+
+/* ========== Xử lý thùng (Bavia line mode) ================================ */
+let xlt = { idTram: null, tram: null, sources: [] };
+
+async function openXuLyThung(idTram){
+  const t = findTram(idTram);
+  if (!t) return;
+  xlt = { idTram, tram: t, sources: [], clientKey: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random()) };
+  document.getElementById('xlt-line-label').textContent = '(' + t.ten_tram + ' — ' + t.ma_sp + ')';
+  document.getElementById('xlt-scan').value = '';
+  document.getElementById('xlt-ok').value = 0;
+  document.getElementById('xlt-ngphe').value = 0;
+  document.getElementById('xlt-ngsua').value = 0;
+  document.getElementById('xlt-ngly').value = '';
+  document.getElementById('xlt-ngly-sum').textContent = '';
+  document.getElementById('xlt-ngref').innerHTML = NG_REF_HTML;
+  wireNgLySum('xlt');
+  document.getElementById('xlt-qc').value = '';
+  document.querySelector('input[name="xlt-cach"][value="nguyen"]').checked = true;
+  document.getElementById('xlt-canhbao').textContent = '';
+  document.getElementById('xlt-body').style.display = '';
+  document.getElementById('xlt-result').style.display = 'none';
+  document.getElementById('btnSubmitXuLyThung').style.display = '';
+  document.getElementById('btnSubmitXuLyThung').disabled = false;
+
+  // Người thao tác lọc theo line
+  const ds = isLineMode() && lineCatalog.includes(t.ten_tram) ? nguoiChoLine(t.ten_tram) : [];
+  document.getElementById('dlNguoiLine').innerHTML = ds.map(n => `<option value="${escapeHtml(n)}">`).join('');
+  document.getElementById('xlt-nguoi').value = t.nguoi_thao_tac || '';
+  document.getElementById('xlt-nguoi-hint').textContent = ds.length ? ' (' + ds.length + ' người được phép thao tác ' + t.ten_tram + ')' : '';
+
+  // Thùng OK đang mở của line này (để "gộp vào")
+  const { data: gop } = await sb.from('duc_tem')
+    .select('tag_no,so_luong')
+    .eq('ma_sp', t.ma_sp).eq('tram_cong_doan', t.ten_tram).gt('so_luong', 0)
+    .or('tag_no.ilike.TKB%,tag_no.ilike.PK%').order('tag_no');
+  document.getElementById('xlt-gop').innerHTML = (gop && gop.length)
+    ? gop.map(g => `<option value="${escapeHtml(g.tag_no)}">${escapeHtml(g.tag_no)} (${fmtNum(g.so_luong)})</option>`).join('')
+    : '<option value="">(chưa có thùng nào)</option>';
+
+  renderXltSources();
+  openModal('modalXuLyThung');
+  setTimeout(() => document.getElementById('xlt-scan').focus(), 100);
+}
+
+document.getElementById('xlt-scan').addEventListener('keydown', async (e) => {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  const raw = e.target.value.trim();
+  e.target.value = '';
+  if (!raw) return;
+  const tag = raw.split('>')[0].replace(/\s+/g, '');   // chịu QR "tag>...".
+  if (xlt.sources.some(s => s.tag_no === tag)) { document.getElementById('xlt-canhbao').textContent = 'Thùng ' + tag + ' đã quét rồi.'; return; }
+  const { data, error } = await sb.from('duc_tem')
+    .select('tag_no,ma_sp,ten_sp,so_luong,lot,so_khuon,may_duc_chi_thi,ngay')
+    .eq('tag_no', tag).maybeSingle();
+  if (error || !data){ document.getElementById('xlt-canhbao').textContent = 'Không tìm thấy tem ' + tag; return; }
+  if (Number(data.so_luong) <= 0){ document.getElementById('xlt-canhbao').textContent = 'Tem ' + tag + ' đã hết số lượng.'; return; }
+  if (data.ma_sp !== xlt.tram.ma_sp){ document.getElementById('xlt-canhbao').textContent = 'Tem ' + tag + ' là mã ' + data.ma_sp + ', khác mã đang chạy (' + xlt.tram.ma_sp + ').'; return; }
+  document.getElementById('xlt-canhbao').textContent = '';
+  xlt.sources.push(data);
+  renderXltSources();
+});
+
+function removeXltSource(tag){ xlt.sources = xlt.sources.filter(s => s.tag_no !== tag); renderXltSources(); }
+
+function renderXltSources(){
+  const list = document.getElementById('xlt-srcList');
+  const empty = document.getElementById('xlt-srcEmpty');
+  const cb = document.getElementById('xlt-canhbao');
+  if (!xlt.sources.length){ list.innerHTML = ''; empty.style.display = ''; cb.textContent = ''; return; }
+  empty.style.display = 'none';
+  const tong = xlt.sources.reduce((s, x) => s + Number(x.so_luong || 0), 0);
+  // Cảnh báo mềm: gộp thùng khác khuôn / khác lô (không chặn).
+  const khuons = [...new Set(xlt.sources.map(s => (s.so_khuon || '').trim()).filter(Boolean))];
+  const lots = [...new Set(xlt.sources.map(s => (s.lot || '').trim()).filter(Boolean))];
+  const warns = [];
+  if (khuons.length > 1) warns.push('khác khuôn (' + khuons.join(', ') + ')');
+  if (lots.length > 1) warns.push('khác lô');
+  cb.textContent = warns.length
+    ? '⚠ Đang gộp thùng ' + warns.join(' · ') + ' — tem ra ghi gộp; truy xuất vẫn chính xác theo từng nguồn.'
+    : '';
+  list.innerHTML = xlt.sources.map(s => `
+    <div class="kb-row" style="padding:6px 9px">
+      <div class="kb-info">
+        <div><b>${escapeHtml(s.tag_no)}</b> · còn <b>${fmtNum(s.so_luong)}</b></div>
+        <div class="kb-sub">Lô ${escapeHtml(s.lot) || '—'} · Khuôn ${escapeHtml(s.so_khuon) || '—'} · ${escapeHtml(s.may_duc_chi_thi) || '—'} · ${s.ngay ? String(s.ngay).split('-').reverse().join('/') : '—'}</div>
+      </div>
+      <button type="button" class="btn-tiny danger" onclick="removeXltSource('${s.tag_no}')">✕</button>
+    </div>`).join('') + `<div style="font-size:11.5px;color:#555;margin-top:4px">Tổng SL nguồn: <b>${fmtNum(tong)}</b></div>`;
+}
+
+document.getElementById('btnSubmitXuLyThung').addEventListener('click', async () => {
+  const cb = document.getElementById('xlt-canhbao');
+  cb.textContent = '';
+  if (!xlt.sources.length) return cb.textContent = 'Chưa quét thùng nguồn nào.';
+  const ok = Number(document.getElementById('xlt-ok').value) || 0;
+  const ngphe = Number(document.getElementById('xlt-ngphe').value) || 0;
+  const ngsua = Number(document.getElementById('xlt-ngsua').value) || 0;
+  if (ok + ngphe + ngsua <= 0) return cb.textContent = 'Nhập OK / NG phế / NG sửa.';
+  const ngly = document.getElementById('xlt-ngly').value.trim();
+  if ((ngphe > 0 || ngsua > 0) && !ngly) return cb.textContent = 'Có NG — ghi nội dung NG (VD: 5V, 4M).';
+  const tongNguon = xlt.sources.reduce((s, x) => s + Number(x.so_luong || 0), 0);
+  if (ok + ngphe + ngsua > tongNguon) return cb.textContent = 'OK + NG (' + (ok + ngphe + ngsua) + ') vượt tổng SL nguồn (' + tongNguon + ').';
+  const cach = document.querySelector('input[name="xlt-cach"]:checked').value;
+  const qc = Number(document.getElementById('xlt-qc').value) || 0;
+  const tagGop = document.getElementById('xlt-gop').value;
+  if (ok > 0 && cach === 'quy_cach' && qc <= 0) return cb.textContent = 'Nhập quy cách pcs/thùng.';
+  if (ok > 0 && cach === 'gop' && !tagGop) return cb.textContent = 'Chọn thùng để gộp vào.';
+
+  const session = await MesAuth.getSession();
+  if (!session) return requireLogin();
+  const btn = document.getElementById('btnSubmitXuLyThung');
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('bavia_xu_ly_thung', {
+    p_id_tram: xlt.idTram,
+    p_tag_nguon: xlt.sources.map(s => s.tag_no),
+    p_ok: ok, p_ng_phe: ngphe, p_ng_sua: ngsua, p_ng_ly_do: ngly || null,
+    p_cach_dong: cach, p_quy_cach: cach === 'quy_cach' ? qc : null,
+    p_tag_gop: cach === 'gop' ? tagGop : null,
+    p_nguoi: document.getElementById('xlt-nguoi').value.trim(),
+    p_user: await MesAuth.getCurrentUserIdentity(),
+    p_client_key: xlt.clientKey,
+  });
+  btn.disabled = false;
+  if (error) return cb.textContent = 'Lỗi: ' + error.message;
+
+  const tems = (data && data.tems) || [];
+  xlt.resultTems = tems;
+  const inPrintable = tems.filter(t => t.loai !== 'ok_gop').map(t => t.tag);
+  document.getElementById('xlt-resultList').innerHTML =
+    (inPrintable.length
+      ? `<div style="margin-bottom:8px"><button type="button" class="btn" onclick='printTkbTems(${JSON.stringify(inPrintable)})'>🖨 In tất cả (${inPrintable.length}) tem A6</button></div>`
+      : '') +
+    (tems.map(t => {
+      const label = t.loai === 'ng_sua' ? 'NG chờ sửa' : (t.loai === 'ok_gop' ? 'gộp vào (không in)' : 'OK');
+      return `<div class="kb-row" style="padding:6px 9px">
+        <div class="kb-info"><div><b>${escapeHtml(t.tag)}</b> · ${fmtNum(t.so_luong)} · ${label}</div></div>
+        ${t.loai === 'ok_gop' ? '' : `<button type="button" class="btn-tiny" onclick='printTkbTems(["${t.tag}"])'>🖨 In</button>`}
+      </div>`;
+    }).join('') || '<div style="font-size:12px;color:#999">Không tạo tem mới (chỉ NG phế).</div>');
+  document.getElementById('xlt-body').style.display = 'none';
+  document.getElementById('xlt-result').style.display = '';
+  btn.style.display = 'none';
+  showMsg('✅ Đã xử lý thùng cho ' + xlt.tram.ten_tram, 'ok');
+  loadTrams();
+  loadDangDo();
+});
+
+/* ---------- Thùng đang dở ---------- */
+async function loadDangDo(){
+  const card = document.getElementById('dangDoCard');
+  const tbody = document.getElementById('dangDoTbody');
+  if (!isLineMode()){ card.style.display = 'none'; return; }
+  const ngay = document.getElementById('ngay').value;
+  const ca = document.getElementById('ca').value;
+  // sự kiện xử lý của (ngày, ca, công đoạn) → thùng nguồn đã đụng
+  const { data: ev } = await sb.from('bavia_xu_ly').select('id')
+    .eq('ngay', ngay).eq('ca', ca).in('cong_doan', congDoanGroup);
+  if (!ev || !ev.length){ card.style.display = 'none'; return; }
+  const { data: ng } = await sb.from('bavia_xu_ly_nguon').select('tag_no_nguon').in('id_xu_ly', ev.map(e => e.id));
+  const tags = [...new Set((ng || []).map(r => r.tag_no_nguon))];
+  if (!tags.length){ card.style.display = 'none'; return; }
+  const { data: tems } = await sb.from('duc_tem')
+    .select('tag_no,ma_sp,so_luong,lot,so_khuon,may_duc_chi_thi')
+    .in('tag_no', tags).gt('so_luong', 0).order('tag_no');
+  if (!tems || !tems.length){ card.style.display = 'none'; return; }
+  card.style.display = '';
+  tbody.innerHTML = tems.map(t => `
+    <tr>
+      <td class="mono">${escapeHtml(t.tag_no)}</td>
+      <td>${escapeHtml(t.ma_sp)}</td>
+      <td class="num"><b>${fmtNum(t.so_luong)}</b></td>
+      <td>${escapeHtml(t.lot) || '—'}</td>
+      <td>${escapeHtml(t.so_khuon) || '—'}</td>
+      <td>${escapeHtml(t.may_duc_chi_thi) || '—'}</td>
+    </tr>`).join('');
+}
+
+/* ========== Hàng NG chờ sửa (GĐ3) ====================================== */
+let suaHangTem = null;
+let suaHangKey = null;
+async function loadNgChoSua(){
+  const card = document.getElementById('ngChoSuaCard');
+  const tbody = document.getElementById('ngChoSuaTbody');
+  if (!isLineMode()){ card.style.display = 'none'; return; }
+  const { data } = await sb.from('duc_tem')
+    .select('tag_no,ma_sp,ten_sp,so_luong,lot,so_khuon,may_duc_chi_thi,tram_cong_doan')
+    .eq('trang_thai', 'NG chờ sửa').gt('so_luong', 0).order('tag_no');
+  if (!data || !data.length){ card.style.display = 'none'; return; }
+  card.style.display = '';
+  tbody.innerHTML = data.map(t => `
+    <tr>
+      <td><input type="checkbox" class="ngcs-pick" data-tag="${escapeHtml(t.tag_no)}" data-masp="${escapeHtml(t.ma_sp)}"></td>
+      <td class="mono">${escapeHtml(t.tag_no)}</td>
+      <td>${escapeHtml(t.ma_sp)}</td>
+      <td class="num"><b>${fmtNum(t.so_luong)}</b></td>
+      <td>${escapeHtml(t.tram_cong_doan) || '—'}</td>
+      <td>${escapeHtml(t.so_khuon) || '—'}</td>
+      <td><button type="button" class="btn-tiny" style="background:var(--accent);color:#fff" onclick='openSuaHang(${JSON.stringify(t)})'>🔧 Sửa xong</button></td>
+    </tr>`).join('');
+  tbody.querySelectorAll('.ngcs-pick').forEach(c => c.addEventListener('change', updateGomBtn));
+  updateGomBtn();
+}
+function updateGomBtn(){
+  const picked = [...document.querySelectorAll('#ngChoSuaTbody .ngcs-pick:checked')];
+  const btn = document.getElementById('btnGomNg');
+  const sameSp = picked.length >= 2 && new Set(picked.map(c => c.dataset.masp)).size === 1;
+  btn.disabled = !sameSp;
+  btn.textContent = picked.length >= 2
+    ? (sameSp ? 'Gom ' + picked.length + ' tem đã chọn' : '⚠ Chọn cùng 1 mã SP')
+    : 'Gom tem (chọn ≥ 2)';
+}
+document.getElementById('btnGomNg').addEventListener('click', async () => {
+  const picked = [...document.querySelectorAll('#ngChoSuaTbody .ngcs-pick:checked')].map(c => c.dataset.tag);
+  if (picked.length < 2) return;
+  if (!confirm('Gom ' + picked.length + ' tem NG chờ sửa thành 1 tem?\n(Giữ phả hệ; các tem cũ chuyển "Đã gộp NG".)')) return;
+  const session = await MesAuth.getSession();
+  if (!session) return requireLogin();
+  const { data, error } = await sb.rpc('bavia_gom_ng_cho_sua', {
+    p_tags: picked,
+    p_nguoi: '',
+    p_user: await MesAuth.getCurrentUserIdentity(),
+    p_client_key: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random()),
+  });
+  if (error) return showMsg('Lỗi gom: ' + error.message, 'err');
+  showMsg('✅ Đã gom thành ' + (data && data.tag_moi) + ' (' + fmtNum(data && data.so_luong) + ' sp)', 'ok');
+  loadNgChoSua();
+});
+
+async function openSuaHang(t){
+  suaHangTem = t;
+  suaHangKey = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random());
+  document.getElementById('sh-tag-label').textContent = '(' + t.tag_no + ' — ' + t.ma_sp + ', còn ' + fmtNum(t.so_luong) + ')';
+  document.getElementById('sh-ok').value = 0;
+  document.getElementById('sh-ngphe').value = 0;
+  document.getElementById('sh-ngly').value = '';
+  document.getElementById('sh-ngly-sum').textContent = '';
+  document.getElementById('sh-ngref').innerHTML = NG_REF_HTML;
+  wireNgLySum('sh');
+  document.getElementById('sh-qc').value = '';
+  document.querySelector('input[name="sh-cach"][value="nguyen"]').checked = true;
+  document.getElementById('sh-nguoi').value = '';
+  document.getElementById('sh-canhbao').textContent = '';
+  document.getElementById('sh-body').style.display = '';
+  document.getElementById('sh-result').style.display = 'none';
+  document.getElementById('btnSubmitSuaHang').style.display = '';
+  document.getElementById('btnSubmitSuaHang').disabled = false;
+  const { data: gop } = await sb.from('duc_tem')
+    .select('tag_no,so_luong')
+    .eq('ma_sp', t.ma_sp).gt('so_luong', 0).or('tag_no.ilike.TKB%,tag_no.ilike.PK%')
+    .neq('tag_no', t.tag_no).order('tag_no');
+  document.getElementById('sh-gop').innerHTML = (gop && gop.length)
+    ? gop.map(g => `<option value="${escapeHtml(g.tag_no)}">${escapeHtml(g.tag_no)} (${fmtNum(g.so_luong)})</option>`).join('')
+    : '<option value="">(chưa có thùng nào)</option>';
+  openModal('modalSuaHang');
+}
+
+document.getElementById('btnSubmitSuaHang').addEventListener('click', async () => {
+  const cb = document.getElementById('sh-canhbao'); cb.textContent = '';
+  const ok = Number(document.getElementById('sh-ok').value) || 0;
+  const ngphe = Number(document.getElementById('sh-ngphe').value) || 0;
+  if (ok + ngphe <= 0) return cb.textContent = 'Nhập OK / NG phế.';
+  if (ok + ngphe > Number(suaHangTem.so_luong)) return cb.textContent = 'OK + NG phế vượt SL còn lại (' + fmtNum(suaHangTem.so_luong) + ').';
+  const ngly = document.getElementById('sh-ngly').value.trim();
+  if (ngphe > 0 && !ngly) return cb.textContent = 'Có NG phế — ghi nội dung NG (VD: 5V, 4M).';
+  const cach = document.querySelector('input[name="sh-cach"]:checked').value;
+  const qc = Number(document.getElementById('sh-qc').value) || 0;
+  const tagGop = document.getElementById('sh-gop').value;
+  if (ok > 0 && cach === 'quy_cach' && qc <= 0) return cb.textContent = 'Nhập quy cách pcs/thùng.';
+  if (ok > 0 && cach === 'gop' && !tagGop) return cb.textContent = 'Chọn thùng để gộp vào.';
+
+  const session = await MesAuth.getSession();
+  if (!session) return requireLogin();
+  const btn = document.getElementById('btnSubmitSuaHang');
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('bavia_sua_hang', {
+    p_tag_ng: suaHangTem.tag_no,
+    p_ngay: document.getElementById('ngay').value,
+    p_ca: document.getElementById('ca').value,
+    p_cong_doan: congDoan,
+    p_ok: ok, p_ng_phe: ngphe, p_ng_ly_do: ngly || null,
+    p_cach_dong: cach, p_quy_cach: cach === 'quy_cach' ? qc : null,
+    p_tag_gop: cach === 'gop' ? tagGop : null,
+    p_nguoi: document.getElementById('sh-nguoi').value.trim(),
+    p_user: await MesAuth.getCurrentUserIdentity(),
+    p_client_key: suaHangKey,
+  });
+  btn.disabled = false;
+  if (error) return cb.textContent = 'Lỗi: ' + error.message;
+
+  const tems = (data && data.tems) || [];
+  const printable = tems.filter(x => x.loai !== 'ok_gop').map(x => x.tag);
+  document.getElementById('sh-resultList').innerHTML =
+    (printable.length ? `<div style="margin-bottom:8px"><button type="button" class="btn" onclick='printTkbTems(${JSON.stringify(printable)})'>🖨 In tất cả (${printable.length}) tem A6</button></div>` : '') +
+    (tems.map(x => `<div class="kb-row" style="padding:6px 9px">
+      <div class="kb-info"><div><b>${escapeHtml(x.tag)}</b> · ${fmtNum(x.so_luong)} · ${x.loai === 'ok_gop' ? 'gộp vào (không in)' : 'OK'}</div></div>
+      ${x.loai === 'ok_gop' ? '' : `<button type="button" class="btn-tiny" onclick='printTkbTems(["${x.tag}"])'>🖨 In</button>`}
+    </div>`).join('') || '<div style="font-size:12px;color:#999">Không tạo tem OK (toàn NG phế).</div>') +
+    (data && Number(data.con_lai_tem_ng) > 0 ? `<div style="font-size:11.5px;color:var(--warn-fg);margin-top:6px">Tem NG còn ${fmtNum(data.con_lai_tem_ng)} chưa sửa.</div>` : '');
+  document.getElementById('sh-body').style.display = 'none';
+  document.getElementById('sh-result').style.display = '';
+  btn.style.display = 'none';
+  showMsg('✅ Đã sửa hàng từ ' + suaHangTem.tag_no, 'ok');
+  loadNgChoSua();
+});
+
+/* ========== Đối soát thùng + Undo (GĐ4) =============================== */
+document.getElementById('ds-btn').addEventListener('click', () => loadDoiSoat(document.getElementById('ds-tag').value.trim()));
+document.getElementById('ds-tag').addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return; e.preventDefault();
+  loadDoiSoat(e.target.value.trim().split('>')[0].replace(/\s+/g, ''));
+});
+
+async function loadDoiSoat(tag){
+  const box = document.getElementById('ds-result');
+  if (!tag){ box.innerHTML = ''; return; }
+  box.innerHTML = 'Đang tra…';
+  const [temR, nguonR, conR, tachR, suaR, gomR] = await Promise.all([
+    sb.from('duc_tem').select('tag_no,ma_sp,ten_sp,so_luong,trang_thai,lot,so_khuon,may_duc_chi_thi').eq('tag_no', tag).maybeSingle(),
+    sb.from('bavia_xu_ly_nguon').select('id_xu_ly,sl_lay,sl_ng_phe,sl_ng_sua').eq('tag_no_nguon', tag),
+    sb.from('cd_tem_nguon').select('tag_no_moi,so_luong_lay').eq('tag_no_nguon', tag),
+    sb.from('duc_tem_tach').select('tag_no_con,so_luong_con').eq('tag_no_cha', tag),
+    sb.from('bavia_sua_log').select('id,ngay,ca,so_ok,so_ng_phe,ly_do,nguoi,thoi_diem').eq('tag_ng', tag).order('id', { ascending: false }),
+    sb.from('bavia_gom_log').select('id,tag_moi,tags_goc,so_luong,nguoi,thoi_diem').or('tag_moi.eq.' + tag + ',tags_goc.cs.{' + tag + '}').order('id', { ascending: false }),
+  ]);
+  const tem = temR.data;
+  if (!tem){ box.innerHTML = '<span style="color:var(--alarm-fg)">Không tìm thấy tem ' + escapeHtml(tag) + '</span>'; return; }
+
+  const evIds = [...new Set((nguonR.data || []).map(r => r.id_xu_ly))];
+  let events = [];
+  if (evIds.length){
+    const { data } = await sb.from('bavia_xu_ly').select('*').in('id', evIds).order('id', { ascending: false });
+    events = data || [];
+  }
+  const nguonByEv = {};
+  (nguonR.data || []).forEach(r => { nguonByEv[r.id_xu_ly] = r; });
+
+  const sumLay = (nguonR.data || []).reduce((s, r) => s + Number(r.sl_lay || 0), 0);
+  const sumPhe = (nguonR.data || []).reduce((s, r) => s + Number(r.sl_ng_phe || 0), 0);
+  const sumSua = (nguonR.data || []).reduce((s, r) => s + Number(r.sl_ng_sua || 0), 0);
+  const sumTach = (tachR.data || []).reduce((s, r) => s + Number(r.so_luong_con || 0), 0);
+  // OK-allocated qua cd_tem_nguon nhưng KHÔNG phải bavia NG-sửa:
+  const sumCon = (conR.data || []).reduce((s, r) => s + Number(r.so_luong_lay || 0), 0);
+  const conLai = Number(tem.so_luong || 0);
+  const banDau = conLai + sumCon + sumPhe + sumTach;  // sl_lay của bavia = OK + NG-sửa (đã nằm trong sumCon) + NG phế
+
+  let html = `<div style="margin-bottom:6px">
+    <b>${escapeHtml(tem.tag_no)}</b> · ${escapeHtml(tem.ma_sp)} ${escapeHtml(tem.ten_sp || '')}
+    · trạng thái: <b>${escapeHtml(tem.trang_thai || '—')}</b>
+    · Lô ${escapeHtml(tem.lot) || '—'} · Khuôn ${escapeHtml(tem.so_khuon) || '—'}
+  </div>
+  <table style="margin-bottom:10px"><tr>
+    <th>SL ban đầu (ước)</th><th>Đã ra (OK+sửa)</th><th>NG phế</th><th>Đã tách</th><th>Còn lại</th>
+  </tr><tr>
+    <td class="num">${fmtNum(banDau)}</td>
+    <td class="num" style="color:#1a7a3a">${fmtNum(sumCon)}</td>
+    <td class="num" style="color:#c00">${fmtNum(sumPhe)}</td>
+    <td class="num">${fmtNum(sumTach)}</td>
+    <td class="num"><b>${fmtNum(conLai)}</b></td>
+  </tr></table>`;
+
+  if (events.length){
+    html += '<div style="font-weight:600;margin-bottom:4px">Lần "Xử lý thùng" đụng vào thùng này:</div><div class="tbl-wrap"><table><thead><tr><th>#</th><th>Lúc</th><th>Line</th><th>OK</th><th>NG phế</th><th>NG sửa</th><th></th></tr></thead><tbody>';
+    html += events.map(e => {
+      const n = nguonByEv[e.id] || {};
+      return `<tr>
+        <td>${e.id}</td>
+        <td class="mono">${e.thoi_diem ? new Date(e.thoi_diem).toLocaleString('vi-VN', { hour12: false }) : '—'}</td>
+        <td>${escapeHtml(e.ten_tram || '—')}</td>
+        <td class="num">${fmtNum(n.sl_lay - n.sl_ng_phe - n.sl_ng_sua)}</td>
+        <td class="num">${fmtNum(n.sl_ng_phe)}</td>
+        <td class="num">${fmtNum(n.sl_ng_sua)}</td>
+        <td><button type="button" class="btn-tiny danger" onclick="undoXuLy(${e.id})">↩ Hoàn tác</button></td>
+      </tr>`;
+    }).join('') + '</tbody></table></div>';
+  }
+
+  if ((conR.data || []).length){
+    html += '<div style="font-weight:600;margin:10px 0 4px">Tem con tạo ra từ thùng này:</div>' +
+      (conR.data || []).map(r => `<span class="mono" style="display:inline-block;margin:2px 6px 2px 0">${escapeHtml(r.tag_no_moi)} (${fmtNum(r.so_luong_lay)})</span>`).join('');
+  }
+  if ((tachR.data || []).length){
+    html += '<div style="font-weight:600;margin:10px 0 4px">Tách thành:</div>' +
+      (tachR.data || []).map(r => `<span class="mono" style="display:inline-block;margin:2px 6px 2px 0">${escapeHtml(r.tag_no_con)} (${fmtNum(r.so_luong_con)})</span>`).join('');
+  }
+  if ((suaR.data || []).length){
+    html += '<div style="font-weight:600;margin:10px 0 4px">Lần "Sửa hàng" cho tem này:</div><div class="tbl-wrap"><table><thead><tr><th>#</th><th>Lúc</th><th>OK</th><th>NG phế</th><th>Lý do</th><th></th></tr></thead><tbody>';
+    html += (suaR.data || []).map(s => `<tr>
+      <td>${s.id}</td>
+      <td class="mono">${s.thoi_diem ? new Date(s.thoi_diem).toLocaleString('vi-VN', { hour12: false }) : '—'}</td>
+      <td class="num">${fmtNum(s.so_ok)}</td>
+      <td class="num">${fmtNum(s.so_ng_phe)}</td>
+      <td>${escapeHtml(s.ly_do || '—')}</td>
+      <td><button type="button" class="btn-tiny danger" onclick="undoSuaHang(${s.id})">↩ Hoàn tác</button></td>
+    </tr>`).join('') + '</tbody></table></div>';
+  }
+  if ((gomR.data || []).length){
+    html += '<div style="font-weight:600;margin:10px 0 4px">Lần "Gom NG chờ sửa":</div><div class="tbl-wrap"><table><thead><tr><th>#</th><th>Lúc</th><th>Tem gộp</th><th>SL</th><th>Từ</th><th></th></tr></thead><tbody>';
+    html += (gomR.data || []).map(g => `<tr>
+      <td>${g.id}</td>
+      <td class="mono">${g.thoi_diem ? new Date(g.thoi_diem).toLocaleString('vi-VN', { hour12: false }) : '—'}</td>
+      <td class="mono">${escapeHtml(g.tag_moi)}</td>
+      <td class="num">${fmtNum(g.so_luong)}</td>
+      <td class="mono" style="font-size:11px">${(g.tags_goc || []).map(escapeHtml).join(', ')}</td>
+      <td><button type="button" class="btn-tiny danger" onclick="undoGomNg(${g.id})">↩ Hoàn tác</button></td>
+    </tr>`).join('') + '</tbody></table></div>';
+  }
+  box.innerHTML = html;
+}
+async function undoGomNg(id){
+  if (!confirm('Hoàn tác lần gom NG #' + id + '?\nTem gộp bị xoá, số lượng trả về các tem NG cũ.')) return;
+  const session = await MesAuth.getSession();
+  if (!session) return requireLogin();
+  const { error } = await sb.rpc('bavia_undo_gom_ng', { p_id: id, p_user: await MesAuth.getCurrentUserIdentity() });
+  if (error) return showMsg('Lỗi hoàn tác: ' + error.message, 'err');
+  showMsg('✅ Đã hoàn tác gom #' + id, 'ok');
+  loadDoiSoat(document.getElementById('ds-tag').value.trim());
+  loadNgChoSua();
+}
+
+async function undoXuLy(id){
+  if (!confirm('Hoàn tác lần "Xử lý thùng" #' + id + '?\nCác tem thành phẩm của lần này sẽ bị xoá, số lượng trả về thùng nguồn.\nChỉ được nếu tem chưa dùng ở bước sau.')) return;
+  const session = await MesAuth.getSession();
+  if (!session) return requireLogin();
+  const { error } = await sb.rpc('bavia_undo_xu_ly', { p_id: id, p_user: await MesAuth.getCurrentUserIdentity() });
+  if (error) return showMsg('Lỗi hoàn tác: ' + error.message, 'err');
+  showMsg('✅ Đã hoàn tác #' + id, 'ok');
+  loadDoiSoat(document.getElementById('ds-tag').value.trim());
+  loadTrams(); loadDangDo(); loadNgChoSua();
+}
+async function undoSuaHang(id){
+  if (!confirm('Hoàn tác lần "Sửa hàng" #' + id + '?\nTem OK sẽ bị xoá, số lượng trả về tem NG chờ sửa.')) return;
+  const session = await MesAuth.getSession();
+  if (!session) return requireLogin();
+  const { error } = await sb.rpc('bavia_undo_sua_hang', { p_id: id, p_user: await MesAuth.getCurrentUserIdentity() });
+  if (error) return showMsg('Lỗi hoàn tác: ' + error.message, 'err');
+  showMsg('✅ Đã hoàn tác sửa hàng #' + id, 'ok');
+  loadDoiSoat(document.getElementById('ds-tag').value.trim());
+  loadNgChoSua();
+}
+
+/* ---------- Nạp kế hoạch hàng loạt từ KHSX tuần ---------- */
+document.getElementById('btnKhsxBatch').addEventListener('click', () => {
+  const lbl = tramLabel();
+  const pendingPlan = planToday.filter(p => !trams.some(t => t.ma_sp === p.ma_sp && t.cong_doan === p.cong_doan));
+  const merged = congDoanGroup.length > 1;
+  const list = document.getElementById('kbList');
+  const empty = document.getElementById('kbEmpty');
+
+  // Line mode: gán từng mã SP kế hoạch tuần vào 1 Line còn trống trong danh mục.
+  if (isLineMode()){
+    const freeLines = lineCatalog.filter(L => !trams.some(t => t.ten_tram === L));
+    const n = Math.min(pendingPlan.length, freeLines.length);
+    if (!n){
+      list.style.display = 'none'; list.innerHTML = '';
+      empty.style.display = '';
+      empty.textContent = !freeLines.length
+        ? 'Tất cả Line đã có kế hoạch.'
+        : 'Không có mã SP nào trong KHSX tuần hôm nay cần nạp.';
+    } else {
+      list.style.display = 'flex'; empty.style.display = 'none';
+      const extra = pendingPlan.length - n;
+      list.innerHTML = pendingPlan.slice(0, n).map((p, i) => {
+        const opts = freeLines.map(L => `<option value="${escapeHtml(L)}"${L === freeLines[i] ? ' selected' : ''}>${escapeHtml(L)}</option>`).join('');
+        return `
+          <div class="kb-row" data-ma-sp="${escapeHtml(p.ma_sp)}" data-ten-sp="${escapeHtml(p.ten_sp || '')}" data-cong-doan="${escapeHtml(p.cong_doan)}" data-kh-tuan="${p.khTuan || ''}">
+            <input type="checkbox" class="kb-check" checked style="width:16px;height:16px;flex:none">
+            <div class="kb-info">
+              <div><b>${escapeHtml(p.ma_sp)}</b> — ${escapeHtml(p.ten_sp || '')}</div>
+              <div class="kb-sub">Gán vào Line · KH ca (pcs) · KH tuần ${fmtNum(p.khTuan)}</div>
+            </div>
+            <select class="kb-line-sel">${opts}</select>
+            <input type="number" class="kb-kh-ca" min="0" value="${p.khCa || ''}">
+          </div>`;
+      }).join('');
+      if (extra > 0){
+        const note = document.createElement('div');
+        note.style.cssText = 'font-size:11px;color:var(--warn-fg)';
+        note.textContent = '⚠ Còn ' + extra + ' mã SP chưa xếp được — hết Line trống.';
+        list.appendChild(note);
+      }
+      list.querySelectorAll('.kb-check').forEach(chk => chk.addEventListener('change', updateKbCount));
+    }
+    updateKbCount();
+    openModal('modalKhsxBatch');
+    return;
+  }
+
+  if (!pendingPlan.length){
+    list.style.display = 'none'; list.innerHTML = '';
+    empty.style.display = '';
+  } else {
+    list.style.display = 'flex'; empty.style.display = 'none';
+    // Đánh số tiếp theo sau các trạm cùng nhãn đã đặt tên "Lbl N" đang chạy,
+    // tránh trùng tên với trạm hiện có.
+    const usedNums = trams.map(t => {
+      const m = new RegExp('^' + lbl + '\\s+(\\d+)$', 'i').exec(t.ten_tram || '');
+      return m ? Number(m[1]) : 0;
+    });
+    let nextNum = (usedNums.length ? Math.max(...usedNums) : 0) + 1;
+
+    list.innerHTML = pendingPlan.map((p, i) => {
+      const tenGoiY = lbl + ' ' + (nextNum + i);
+      return `
+        <div class="kb-row" data-ma-sp="${escapeHtml(p.ma_sp)}" data-ten-sp="${escapeHtml(p.ten_sp || '')}" data-cong-doan="${escapeHtml(p.cong_doan)}" data-kh-tuan="${p.khTuan || ''}">
+          <input type="checkbox" class="kb-check" checked style="width:16px;height:16px;flex:none">
+          <div class="kb-info">
+            <div><b>${escapeHtml(p.ma_sp)}</b> — ${escapeHtml(p.ten_sp || '')} ${merged ? `<span class="sub-cd-badge">${escapeHtml(p.cong_doan)}</span>` : ''}</div>
+            <div class="kb-sub">Tên ${lbl.toLowerCase()} · KH ca (pcs)</div>
+          </div>
+          <input type="text" autocomplete="off" class="kb-ten-tram" value="${escapeHtml(tenGoiY)}">
+          <input type="number" class="kb-kh-ca" min="0" value="${p.khCa || ''}">
+        </div>`;
+    }).join('');
+    list.querySelectorAll('.kb-check').forEach(chk => chk.addEventListener('change', updateKbCount));
+  }
+  updateKbCount();
+  openModal('modalKhsxBatch');
+});
+
+function updateKbCount(){
+  const n = document.querySelectorAll('#kbList .kb-check:checked').length;
+  document.getElementById('kbCountLabel').textContent = n > 0 ? 'Đã chọn ' + n : '';
+}
+
+document.getElementById('btnSubmitKhsxBatch').addEventListener('click', async () => {
+  const lineMode = isLineMode();
+  const rows = Array.from(document.querySelectorAll('#kbList .kb-row')).filter(r => r.querySelector('.kb-check').checked);
+  if (!rows.length) return showMsg('Chưa chọn mã SP nào.', 'err');
+  const tenOf = r => lineMode ? r.querySelector('.kb-line-sel').value : r.querySelector('.kb-ten-tram').value.trim();
+  for (const r of rows) {
+    if (!tenOf(r)) return showMsg('Có dòng chưa nhập tên ' + tramLabel().toLowerCase() + '.', 'err');
+    if (lineMode && r.querySelector('.kb-kh-ca').value === '') return showMsg('KH ca là bắt buộc khi gán kế hoạch cho line.', 'err');
+  }
+  if (lineMode){
+    const tens = rows.map(tenOf);
+    if (new Set(tens).size !== tens.length) return showMsg('Hai mã SP đang gán trùng 1 Line — chọn lại.', 'err');
+  }
+  const session = await MesAuth.getSession();
+  if (!session) return requireLogin();
+
+  const btn = document.getElementById('btnSubmitKhsxBatch');
+  btn.disabled = true;
+  showMsg('Đang nạp kế hoạch cho ' + rows.length + ' ' + tramLabel().toLowerCase() + '...', 'ok');
+  let ok = 0; const fail = [];
+  for (const r of rows) {
+    const ten = tenOf(r);
+    const khCaRaw = r.querySelector('.kb-kh-ca').value;
+    const { error } = await sb.rpc('cd_tram_tao', {
+      p_ngay: document.getElementById('ngay').value, p_ca: document.getElementById('ca').value, p_cong_doan: r.dataset.congDoan || congDoan,
+      p_ten_tram: ten, p_ma_sp: r.dataset.maSp, p_ten_sp: r.dataset.tenSp,
+      p_kh_ca: khCaRaw === '' ? null : Number(khCaRaw),
+      p_kh_tuan: r.dataset.khTuan ? Number(r.dataset.khTuan) : null,
+      p_nguoi: '', p_user: await MesAuth.getCurrentUserIdentity(),
+    });
+    if (error) fail.push(ten + ': ' + error.message); else ok++;
+  }
+  btn.disabled = false;
+
+  if (!fail.length){
+    closeModal('modalKhsxBatch');
+    showMsg('✅ Đã nạp kế hoạch cho ' + ok + ' ' + tramLabel().toLowerCase() + '.', 'ok');
+  } else {
+    showMsg('Nạp được ' + ok + '/' + rows.length + '. Lỗi: ' + fail.join('; '), 'err');
+  }
+  loadTrams();
+});
+
+function requireLogin(){
+  showMsg('Cần đăng nhập trước. Đang chuyển sang trang đăng nhập…', 'err');
+  setTimeout(() => { window.location.href = 'shared/login.html?returnTo=' + encodeURIComponent(window.location.href); }, 1200);
+}
+
+initCongDoan();
+</script>
+</body>
+</html>

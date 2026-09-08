@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Báo cáo cuối ca — Bavia/Gia công/Sơn — TOYOTAKI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet"></noscript>
+<!--
+  cong-doan-bao-cao-ca.html — báo cáo sản lượng/NG CUỐI CA cho các công đoạn
+  ngoài Đúc (Bavia/Gia công/Sơn/OQC), theo đúng quyết định đã chốt: NG không
+  ghi tại từng lần quét chuyển công đoạn — trưởng ca tổng hợp cuối ca theo
+  từng mã SP: nhận vào bao nhiêu, ra OK bao nhiêu, NG bao nhiêu. Xem
+  supabase/migration_phase_T2_dong_goi_routing.sql (bảng cd_bao_cao_ca, RPC
+  cd_luu_bao_cao_ca).
+  "Số nhận vào" gợi ý tự động lấy TỔNG THEO NGÀY (không chia chính xác theo
+  ranh giới ca — cd_chuyen_cong_doan_log không có cột ca) từ
+  cd_chuyen_cong_doan_log — trưởng ca tự đối chiếu/sửa lại cho khớp ca thực tế.
+-->
+<style>
+:root{--bg-page:#EEF1F5;--bg-panel:#FFFFFF;--bg-sunken:#F5F7FA;--bg-header:#1E293B;--border:#D9DFE5;--border-strong:#B8C1CC;--text:#0F172A;--text-muted:#64748B;--text-dim:#94A3B8;--accent:#0F5FA5;--accent-hover:#0A4681;--run-fg:#047857;--run-bg:#ECFDF5;--warn-fg:#B45309;--warn-bg:#FFFBEB;--alarm-fg:#B91C1C;--alarm-bg:#FEF2F2;--shadow-sm:0 1px 2px rgba(15,23,42,0.04);--shadow-md:0 4px 12px rgba(15,23,42,0.08);--shadow-lg:0 12px 32px rgba(15,23,42,0.16);}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background:var(--bg-page);min-height:100vh;color:var(--text);font-size:13px;line-height:1.35;-webkit-font-smoothing:antialiased}
+body{padding:6px 6px 60px}
+.wrap{margin:6px 0 0;display:flex;flex-direction:column;gap:6px}
+header{background:var(--bg-header);color:#F1F5F9;border-radius:8px;padding:6px 14px;display:flex;align-items:center;gap:14px;box-shadow:var(--shadow-sm);flex-wrap:wrap}
+.brand{display:flex;flex-direction:column;line-height:1.2}
+.brand .co{font-size:9px;letter-spacing:.08em;color:#94A3B8;text-transform:uppercase;font-weight:500}
+.brand .title{font-size:14px;font-weight:700;letter-spacing:-.01em;color:#FFF}
+.header-group{display:flex;align-items:center;gap:6px}
+.header-label{font-size:10px;color:#94A3B8;text-transform:uppercase;letter-spacing:.05em;font-weight:500}
+.header-select,.header-input{background:#334155;color:#F1F5F9;border:1px solid #475569;border-radius:5px;padding:4px 8px;font-family:inherit;font-size:12px;font-weight:500;cursor:pointer;outline:none}
+.header-select:hover{background:#3F5266}
+.btn-ghost{background:transparent;color:#F1F5F9;border:1px solid #475569}
+.btn-ghost:hover{background:#334155}
+.header-clock{margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;padding:0 10px;line-height:1.15}
+.header-clock .date{font-size:10px;color:#94A3B8}
+.header-clock .time{font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;color:#FFF;letter-spacing:-.02em}
+.auth-info{font-size:10px;color:#94A3B8;display:flex;align-items:center;gap:5px}
+.auth-info a{color:#93C5FD;text-decoration:none;font-weight:600}
+.card{background:var(--bg-panel);border-radius:8px;box-shadow:var(--shadow-sm);border:1px solid var(--border);padding:14px 16px;margin-bottom:0}
+.toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:4px}
+.fg{display:flex;flex-direction:column;gap:3px}
+.fg label{font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em}
+.fg input,.fg select{background:#fff;color:var(--text);border:1.5px solid var(--border-strong);border-radius:5px;padding:6px 9px;font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer;outline:none;min-width:140px}
+.fg input:focus,.fg select:focus{border-color:var(--accent)}
+.btn{border:none;border-radius:5px;padding:7px 14px;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;transition:background .12s;display:inline-flex;align-items:center;gap:6px;background:var(--accent);color:#fff}
+.btn:hover{background:var(--accent-hover)}
+.btn-outline{background:transparent;border:1.5px solid var(--accent);color:var(--accent)}
+.btn-outline:hover{background:var(--bg-sunken)}
+header .btn-outline{border-color:#475569;color:#F1F5F9}
+header .btn-outline:hover{background:#334155}
+.btn-danger{background:var(--alarm-bg);border:1.5px solid #F87171;color:var(--alarm-fg);padding:5px 9px;font-size:11.5px;border-radius:5px;font-family:inherit;font-weight:600;cursor:pointer}
+.btn-danger:hover{background:#FECACA;border-color:#EF4444}
+.tbl-wrap{overflow-x:auto;border-radius:8px;border:1px solid var(--border)}
+table{border-collapse:collapse;width:100%;font-size:12.5px;min-width:820px}
+th,td{border-bottom:1px solid var(--border);padding:6px 7px;text-align:left}
+th{background:var(--bg-sunken);color:var(--text-muted);font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;font-weight:700}
+td input{width:100%;border:1px solid var(--border-strong);border-radius:5px;padding:5px 6px;font-size:12.5px;font-family:inherit}
+td input:focus{outline:none;border-color:var(--accent)}
+td.num{text-align:right}
+.empty-row td{text-align:center;color:var(--text-dim);padding:24px;font-style:italic}
+#msg{margin:0 0 12px;padding:11px 14px;border-radius:8px;font-size:13px;font-weight:600;display:none}
+.err{background:var(--alarm-bg);color:var(--alarm-fg);border:1px solid #FCA5A5;display:block!important}
+.ok{background:var(--run-bg);color:var(--run-fg);border:1px solid #A7F3D0;display:block!important}
+.hint{font-size:11px;color:var(--text-muted);margin-top:6px}
+</style>
+</head>
+<body>
+
+<div id="msg"></div>
+
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="co">Toyotaki</div>
+      <div class="title">Báo Cáo Cuối Ca — Ngoài Đúc</div>
+    </div>
+    <div class="header-group"><span class="header-label">Công đoạn</span><select class="header-select" id="congDoan"></select></div>
+    <div class="header-group"><span class="header-label">Ngày</span><input class="header-input" type="date" id="ngay"></div>
+    <div class="header-group"><span class="header-label">Ca</span><select class="header-select" id="ca"></select></div>
+    <button type="button" class="btn-outline btn" id="btnGoiY">💡 Gợi ý từ lượt chuyển đến (theo ngày)</button>
+    <button type="button" class="btn-outline btn" id="btnAddRow">+ Thêm dòng mã SP</button>
+    <div class="header-clock">
+      <div class="date" id="hdrClockDate"></div>
+      <div class="time" id="hdrClockTime"></div>
+    </div>
+  </header>
+
+  <div class="card">
+    <div class="hint">"Số nhận vào" gợi ý theo TỔNG NGÀY (chưa chia đúng ranh giới ca) — kiểm tra/sửa lại cho khớp ca thực tế trước khi lưu.</div>
+  </div>
+
+  <div class="card">
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr>
+          <th style="min-width:120px">Mã SP</th><th style="min-width:160px">Tên SP</th>
+          <th style="min-width:100px">Tổ/Dây chuyền</th>
+          <th style="min-width:90px">Nhận vào</th><th style="min-width:90px">OK</th><th style="min-width:90px">NG</th>
+          <th style="min-width:160px">Ghi chú</th><th></th>
+        </tr></thead>
+        <tbody id="tbody"><tr class="empty-row"><td colspan="8">Chọn công đoạn/ngày/ca rồi bấm "+ Thêm dòng mã SP" hoặc "💡 Gợi ý".</td></tr></tbody>
+      </table>
+    </div>
+    <div style="margin-top:14px;display:flex;justify-content:flex-end">
+      <button type="button" class="btn" id="btnSave">💾 Lưu báo cáo ca</button>
+    </div>
+  </div>
+</div>
+<datalist id="dlMaSp"></datalist>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="shared/supabase-client.js"></script>
+<script src="shared/navbar.js"></script>
+<script>
+const CONG_DOAN_LIST = ["Bavia", "Gia Công", "Cắt viền", "Sơn", "OQC"];
+const CA_LIST = ["Ca ngày", "Ca đêm", "Ca 1", "Ca 2"];
+let rows = [];
+let productMap = {}; // ma_sp -> ten_sp
+
+function fmtNum(n){ return (Number(n) || 0).toLocaleString('vi-VN'); }
+function escapeHtml(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function showMsg(text, cls){ const el = document.getElementById('msg'); el.textContent = text; el.className = cls; }
+function fillSelect(id, arr, placeholder){
+  const sel = document.getElementById(id);
+  sel.innerHTML = (placeholder ? '<option value="">' + placeholder + '</option>' : '') + (arr || []).map(v => `<option value="${v}">${v}</option>`).join("");
+}
+function getTodayString(){
+  const d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+}
+
+function startHeaderClock(){
+  function tick(){
+    const d = new Date();
+    document.getElementById('hdrClockDate').textContent = d.toLocaleDateString('vi-VN');
+    document.getElementById('hdrClockTime').textContent = d.toLocaleTimeString('vi-VN', { hour12: false });
+  }
+  tick();
+  setInterval(tick, 1000);
+}
+
+async function loadDanhMuc(){
+  startHeaderClock();
+  fillSelect("congDoan", CONG_DOAN_LIST, "-- Chọn công đoạn --");
+  fillSelect("ca", CA_LIST, "-- Chọn ca --");
+  document.getElementById("ngay").value = getTodayString();
+  const { data } = await sb.from('master_products').select('ma_sp,ten_sp');
+  (data || []).forEach(p => { productMap[p.ma_sp] = p.ten_sp || ''; });
+  document.getElementById('dlMaSp').innerHTML = Object.keys(productMap).sort().map(ma => `<option value="${escapeHtml(ma)}">`).join('');
+  ["congDoan", "ngay", "ca"].forEach(id => document.getElementById(id).addEventListener("change", loadExisting));
+  loadExisting();
+}
+
+// Tự tải các dòng đã lưu sẵn cho đúng (công đoạn, ngày, ca) — dữ liệu có thể
+// đến từ cong-doan-dashboard.html (kết ca tự động cộng dồn) hoặc từ lần nhập
+// tay trước ở chính trang này — trang này giờ vừa là form nhập dự phòng vừa
+// là màn xem lại/sửa những gì đã có.
+async function loadExisting(){
+  const congDoan = document.getElementById("congDoan").value;
+  const ngay = document.getElementById("ngay").value;
+  const ca = document.getElementById("ca").value;
+  if (!congDoan || !ngay || !ca){ rows = []; renderRows(); return; }
+  const { data, error } = await sb.from('cd_bao_cao_ca')
+    .select('ma_sp,ten_sp,to_san_xuat,so_luong_nhan_vao,so_luong_ok,so_luong_ng,ghi_chu')
+    .eq('cong_doan', congDoan).eq('ngay', ngay).eq('ca', ca).order('ma_sp');
+  if (error){ showMsg("Lỗi tải dữ liệu đã lưu: " + error.message, "err"); return; }
+  rows = (data || []).map(r => ({
+    ma_sp: r.ma_sp, ten_sp: r.ten_sp || '', to_san_xuat: r.to_san_xuat || '',
+    so_luong_nhan_vao: r.so_luong_nhan_vao || 0, so_luong_ok: r.so_luong_ok || 0, so_luong_ng: r.so_luong_ng || 0,
+    ghi_chu: r.ghi_chu || '',
+  }));
+  renderRows();
+  if (rows.length) showMsg("ℹ️ Đã có " + rows.length + " dòng lưu sẵn cho ca này — sửa lại nếu cần rồi Lưu.", "ok");
+}
+
+function addRow(maSp, tenSp, soNhan){
+  rows.push({ ma_sp: maSp || '', ten_sp: tenSp || '', to_san_xuat: '', so_luong_nhan_vao: soNhan || 0, so_luong_ok: 0, so_luong_ng: 0, ghi_chu: '' });
+  renderRows();
+}
+document.getElementById("btnAddRow").addEventListener("click", () => addRow('', '', 0));
+
+function renderRows(){
+  const tbody = document.getElementById("tbody");
+  if (!rows.length){ tbody.innerHTML = '<tr class="empty-row"><td colspan="8">Chưa có dòng nào — bấm "+ Thêm dòng mã SP" hoặc "💡 Gợi ý".</td></tr>'; return; }
+  tbody.innerHTML = rows.map((r, i) => `
+    <tr>
+      <td><input value="${escapeHtml(r.ma_sp)}" oninput="setField(${i},'ma_sp',this.value)" list="dlMaSp"></td>
+      <td><input value="${escapeHtml(r.ten_sp)}" oninput="setField(${i},'ten_sp',this.value)"></td>
+      <td><input value="${escapeHtml(r.to_san_xuat)}" oninput="setField(${i},'to_san_xuat',this.value)"></td>
+      <td class="num"><input type="number" min="0" value="${r.so_luong_nhan_vao}" oninput="setField(${i},'so_luong_nhan_vao',this.value)"></td>
+      <td class="num"><input type="number" min="0" value="${r.so_luong_ok}" oninput="setField(${i},'so_luong_ok',this.value)"></td>
+      <td class="num"><input type="number" min="0" value="${r.so_luong_ng}" oninput="setField(${i},'so_luong_ng',this.value)"></td>
+      <td><input value="${escapeHtml(r.ghi_chu)}" oninput="setField(${i},'ghi_chu',this.value)"></td>
+      <td><button type="button" class="btn-danger" onclick="removeRow(${i})">Xoá</button></td>
+    </tr>`).join("");
+}
+function setField(i, field, val){
+  const numeric = ['so_luong_nhan_vao','so_luong_ok','so_luong_ng'].includes(field);
+  rows[i][field] = numeric ? (Number(val) || 0) : val;
+  if (field === 'ma_sp' && productMap[val] && !rows[i].ten_sp) { rows[i].ten_sp = productMap[val]; renderRows(); }
+}
+function removeRow(i){ rows.splice(i, 1); renderRows(); }
+
+// Gợi ý "số nhận vào" — tổng sl_thuc_chuyen của cd_chuyen_cong_doan_log có
+// cong_doan_nhan = công đoạn đang chọn, trong đúng NGÀY đang chọn (không lọc
+// theo giờ ca vì log không có cột ca) — gộp theo mã SP.
+document.getElementById("btnGoiY").addEventListener("click", loadGoiY);
+async function loadGoiY(){
+  const congDoan = document.getElementById("congDoan").value;
+  const ngay = document.getElementById("ngay").value;
+  if (!congDoan || !ngay) { showMsg("Chọn công đoạn và ngày trước.", "err"); return; }
+  showMsg("⏳ Đang tải gợi ý...", "wait");
+  const start = ngay + "T00:00:00";
+  const end = ngay + "T23:59:59.999";
+  const { data, error } = await sb.from('cd_chuyen_cong_doan_log')
+    .select('ma_sp,ten_sp,sl_thuc_chuyen')
+    .eq('cong_doan_nhan', congDoan)
+    .gte('thoi_gian_chuyen', start).lte('thoi_gian_chuyen', end);
+  if (error) { showMsg("Lỗi tải gợi ý: " + error.message, "err"); return; }
+  if (!data || !data.length) { showMsg("Không có lượt chuyển đến nào trong ngày cho công đoạn này.", "err"); return; }
+  const bySp = {};
+  data.forEach(r => {
+    const k = r.ma_sp || '(không rõ)';
+    if (!bySp[k]) bySp[k] = { ma_sp: k, ten_sp: r.ten_sp || productMap[k] || '', tong: 0 };
+    bySp[k].tong += Number(r.sl_thuc_chuyen) || 0;
+  });
+  rows = Object.values(bySp).map(s => ({ ma_sp: s.ma_sp, ten_sp: s.ten_sp, to_san_xuat: '', so_luong_nhan_vao: s.tong, so_luong_ok: 0, so_luong_ng: 0, ghi_chu: '' }));
+  renderRows();
+  document.getElementById("msg").style.display = "none";
+}
+
+document.getElementById("btnSave").addEventListener("click", saveReport);
+async function saveReport(){
+  const congDoan = document.getElementById("congDoan").value;
+  const ngay = document.getElementById("ngay").value;
+  const ca = document.getElementById("ca").value;
+  if (!congDoan || !ngay || !ca) { showMsg("Chọn đủ Công đoạn / Ngày / Ca.", "err"); return; }
+  if (!rows.length) { showMsg("Chưa có dòng nào để lưu.", "err"); return; }
+  if (rows.some(r => !r.ma_sp.trim())) { showMsg("Có dòng chưa nhập Mã SP.", "err"); return; }
+
+  const session = await MesAuth.getSession();
+  if (!session){
+    showMsg("Cần đăng nhập trước khi lưu. Đang chuyển sang trang đăng nhập…", "err");
+    setTimeout(() => { window.location.href = 'shared/login.html?returnTo=' + encodeURIComponent(window.location.href); }, 1200);
+    return;
+  }
+  const nguoi = await MesAuth.getCurrentUserIdentity();
+
+  const btn = document.getElementById("btnSave");
+  btn.disabled = true; btn.textContent = "⏳ Đang lưu...";
+  const payload = rows.map(r => Object.assign({}, r, { ngay, ca, cong_doan: congDoan }));
+  const { data, error } = await sb.rpc('cd_luu_bao_cao_ca', { p_rows: payload, p_nguoi: nguoi || '' });
+  btn.disabled = false; btn.textContent = "💾 Lưu báo cáo ca";
+  if (error) { showMsg("Lỗi lưu: " + error.message, "err"); return; }
+  showMsg("✅ Đã lưu " + data + " dòng báo cáo cho " + congDoan + " — " + ca + " ngày " + ngay.split("-").reverse().join("/"), "ok");
+}
+
+loadDanhMuc();
+</script>
+</body>
+</html>

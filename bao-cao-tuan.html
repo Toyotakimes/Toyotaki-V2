@@ -1,0 +1,981 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Báo Cáo Sản Xuất Tuần — MES Toyotaki</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet"></noscript>
+<!--
+  bao-cao-tuan.html — báo cáo sản xuất tuần khối Đúc, tự tính TRỰC TIẾP mỗi
+  khi mở (không lưu lại các số này ở đâu — xem tuần nào tính lại tuần đó,
+  luôn khớp dữ liệu gốc). Số KẾ HOẠCH lấy từ duc_khsx_tuan_plan (kế hoạch
+  tuần đã duyệt, nhập/sửa qua khsx-tuan.html) — CỐ ĐỊNH theo kế hoạch đã
+  duyệt, không đổi dù trưởng ca có sửa KH ca trên duc-dashboard.html trước
+  khi kết ca. Số THỰC TẾ vẫn lấy từ duc_bao_cao_ca/duc_su_co_log/
+  duc_lich_su_san_xuat (chốt lúc kết ca). Riêng khối "So sánh Ca 1/Ca 2"
+  vẫn dùng KH ca đã chốt vì duc_khsx_tuan_plan không chia theo ca.
+
+  Khối Đúc có 2 phương án ca song song tuỳ giai đoạn: "2 ca 8h" (Ca 1/Ca 2)
+  dùng tới 23/08/2026, và "2 ca 12h" (Ca ngày/Ca đêm) là mặc định từ
+  24/08/2026 (xem migration_phase_D30). MỌI truy vấn ở đây lọc
+  .in('ca', CA_HOP_LE) gồm cả 4 tên để không bỏ sót ca nào theo thời gian.
+
+  Bảng "Tổng hợp vấn đề và hành động đối ứng" ở cuối trang là phần DUY NHẤT
+  được lưu lại (bảng duc_bao_cao_tuan_van_de, migration T20) — gợi ý tự động
+  từ top mã lỗi của đúng tuần đang xem nếu chưa có bản lưu, biên tập rồi bấm
+  Lưu để giữ lại, xem lại tuần đó sau này sẽ hiện đúng bản đã lưu.
+-->
+<style>
+  :root{
+    --bg-page:#EEF1F5; --bg-panel:#FFFFFF; --bg-sunken:#F5F7FA; --bg-header:#1E293B;
+    --border:#D9DFE5; --border-strong:#B8C1CC; --text:#0F172A; --text-muted:#64748B; --text-dim:#94A3B8;
+    --accent:#0F5FA5; --accent-hover:#0A4681;
+    --run-fg:#047857; --run-bg:#ECFDF5; --warn-fg:#B45309; --warn-bg:#FFFBEB; --alarm-fg:#B91C1C; --alarm-bg:#FEF2F2;
+    --shadow-sm:0 1px 2px rgba(15,23,42,0.04); --shadow-md:0 4px 12px rgba(15,23,42,0.08); --shadow-lg:0 12px 32px rgba(15,23,42,0.16);
+    /* aliases giữ nguyên tên biến cũ trong toàn bộ CSS bên dưới, trỏ sang bộ token mới */
+    --tk-black:var(--text); --tk-cream:var(--bg-page); --tk-cream-2:var(--bg-sunken);
+    --tk-orange:var(--accent); --tk-orange-deep:var(--accent-hover); --tk-line:var(--border);
+    --tk-muted:var(--text-muted); --tk-card:var(--bg-panel); --tk-good:var(--run-fg); --tk-warn:var(--warn-fg); --tk-bad:var(--alarm-fg);
+    --ca1:var(--accent); --ca2:#C8703A;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background:var(--tk-cream);color:var(--tk-black);font-size:13px;line-height:1.35;-webkit-font-smoothing:antialiased;}
+  body{padding:6px 20px 70px;}
+  .wrap{margin:6px 0 0;}
+
+  header{background:var(--bg-header);color:#F1F5F9;border-radius:8px;padding:6px 14px;display:flex;align-items:center;gap:14px;box-shadow:var(--shadow-sm);flex-wrap:wrap;margin-bottom:16px;}
+  .brand{display:flex;flex-direction:column;line-height:1.2;}
+  .brand .co{font-size:9px;letter-spacing:.08em;color:#94A3B8;text-transform:uppercase;font-weight:500;}
+  .brand .title{font-size:14px;font-weight:700;letter-spacing:-.01em;color:#FFF;}
+  .header-group{display:flex;align-items:center;gap:6px;}
+  .header-label{font-size:10px;color:#94A3B8;text-transform:uppercase;letter-spacing:.05em;font-weight:500;}
+  .header-select,.header-input{background:#334155;color:#F1F5F9;border:1px solid #475569;border-radius:5px;padding:4px 8px;font-family:inherit;font-size:12px;font-weight:500;cursor:pointer;outline:none;}
+  .header-select:hover{background:#3F5266;}
+  .header-clock{margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;padding:0 10px;line-height:1.15;}
+  .header-clock .date{font-size:10px;color:#94A3B8;}
+  .header-clock .time{font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;color:#FFF;letter-spacing:-.02em;}
+  .btn{padding:6px 12px;border-radius:5px;border:none;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;transition:background .12s;display:inline-flex;align-items:center;gap:6px;}
+  .btn-ghost{background:transparent;color:#F1F5F9;border:1px solid #475569;}
+  .btn-ghost:hover:not(:disabled){background:#334155;}
+
+  .card{background:var(--tk-card);border:1px solid var(--tk-line);border-radius:12px;padding:20px 22px;margin-bottom:22px;box-shadow:var(--shadow-sm);}
+  .card h2{font-size:16px;margin:0 0 14px;font-weight:700;border-bottom:1px solid var(--tk-line);padding-bottom:9px;}
+  .card h3{font-size:13.5px;margin:0 0 10px;font-weight:700;color:var(--tk-black);}
+
+  .picker-row{display:flex;gap:10px;align-items:end;flex-wrap:wrap;}
+  .fg{display:flex;flex-direction:column;gap:5px;}
+  label{font-size:11.5px;font-weight:700;color:var(--text-muted);}
+  input,select,textarea{padding:8px 10px;border:1px solid var(--border-strong);border-radius:7px;font-size:13px;font-family:inherit;background:#fff;color:var(--tk-black);}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--tk-orange);}
+  button{padding:9px 16px;border:none;border-radius:7px;background:var(--tk-orange);color:#fff;font-size:13px;font-weight:700;cursor:pointer;}
+  button:hover:not(:disabled){background:var(--tk-orange-deep);}
+  button:disabled{opacity:.55;cursor:default;}
+  button.outline{background:#fff;color:var(--tk-orange-deep);border:1.5px solid var(--tk-orange);}
+  button.small{padding:5px 10px;font-size:12px;}
+  .week-badge{font-size:12px;font-weight:700;padding:5px 12px;border-radius:20px;}
+  .week-badge.live{background:#fbe8cf;color:var(--tk-warn);}
+  .week-badge.done{background:#e7f5ea;color:var(--tk-good);}
+
+  .msg{padding:11px 13px;border-radius:8px;font-size:13px;margin-top:10px;}
+  .msg.error{background:var(--alarm-bg);color:var(--tk-bad);border:1px solid #f0c4bd;}
+  .msg.info{background:var(--bg-sunken);color:var(--text);border:1px solid var(--border);}
+  .msg.ok{background:var(--run-bg);color:var(--tk-good);border:1px solid #c3e3cc;}
+
+  #reportBody{display:none;}
+
+  .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:9px;margin-bottom:20px;}
+  .kpi{background:#fff;border:1px solid var(--tk-line);border-radius:9px;padding:11px 12px;}
+  .kpi .k{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--tk-muted);}
+  .kpi .v{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:20px;font-weight:700;margin-top:3px;}
+  .kpi .s{font-size:11px;color:#6b5c4b;margin-top:2px;}
+  .kpi.bad .v{color:var(--tk-bad);}
+  @media (max-width:820px){ .kpis{grid-template-columns:repeat(3,1fr);} }
+  @media (max-width:520px){ .kpis{grid-template-columns:repeat(2,1fr);} }
+
+  .num{font-family:'JetBrains Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;}
+  .tbl-wrap{overflow-x:auto;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  thead th{text-align:left;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--tk-muted);
+    padding:8px 10px;border-bottom:1px solid var(--tk-line);white-space:nowrap;background:var(--bg-sunken);}
+  tbody td{padding:7px 10px;border-bottom:1px solid var(--tk-line);vertical-align:middle;}
+  tbody tr:last-child td{border-bottom:none;}
+  td.num,th.num{text-align:right;}
+  .rowname{font-weight:700;}
+  .rowsub{color:var(--tk-muted);font-size:11.5px;}
+  .sp-row-kh td{border-bottom:none;padding-bottom:2px;}
+  .sp-row-tt td{padding-top:2px;}
+
+  .barcell{display:flex;align-items:center;gap:8px;min-width:160px;}
+  .bartrack{flex:1;height:7px;background:var(--bg-sunken);border-radius:4px;overflow:hidden;}
+  .barfill{height:100%;border-radius:4px;background:var(--tk-orange);}
+  .barfill.bad{background:var(--tk-bad);}
+  .barval{font-size:12px;color:#6b5c4b;white-space:nowrap;min-width:48px;text-align:right;}
+
+  .pct-pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11.5px;font-weight:700;}
+  .pct-good{background:#e7f5ea;color:var(--tk-good);}
+  .pct-warn{background:#fbf0d9;color:var(--tk-warn);}
+  .pct-bad{background:#fbe9e7;color:var(--tk-bad);}
+
+  .priority-box{background:#FBF0E2;border:1px solid var(--tk-orange);border-radius:9px;padding:14px 16px 12px;margin-top:14px;}
+  .priority-box .ph{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--tk-orange-deep);margin-bottom:9px;}
+  .priority-box ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;}
+  .priority-box li{display:flex;gap:10px;align-items:flex-start;font-size:13px;}
+  .prank{flex:none;width:20px;height:20px;border-radius:50%;background:var(--tk-orange);color:#fff;font-size:11px;font-weight:700;
+    display:flex;align-items:center;justify-content:center;margin-top:1px;font-family:'JetBrains Mono',monospace;}
+  .priority-box b{color:var(--tk-black);}
+  .priority-box .pm{color:#6b5c4b;font-size:12px;}
+  .priority-box .lydo{color:#6b5c4b;font-size:12px;margin-top:3px;}
+
+  .daytrend{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;}
+  .daytrend.month{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;}
+  .daytrend.month .day{flex:none;width:78px;}
+  .day{border:1px solid var(--tk-line);border-radius:8px;padding:10px 10px 12px;background:#fff;}
+  .day.today{border-color:var(--tk-warn);background:#FEF8EC;}
+  .day-date{font-size:11.5px;font-weight:700;color:#4a3f33;}
+  .day-wd{font-size:10.5px;color:var(--tk-muted);text-transform:uppercase;}
+  .day-bars{display:flex;align-items:flex-end;gap:4px;height:60px;margin:8px 0 6px;overflow:hidden;}
+  .day-bar{flex:1;border-radius:3px 3px 0 0;}
+  .day-bar.kh{background:#EFE2CE;}
+  .day-bar.tt{background:var(--tk-orange);}
+  .day-ht{font-size:10.5px;color:var(--tk-muted);}
+  .day-ht b{color:#4a3f33;}
+  @media (max-width:820px){ .daytrend{grid-template-columns:repeat(3,1fr);} }
+  @media (max-width:520px){ .daytrend{grid-template-columns:repeat(2,1fr);} }
+
+  .ca-legend{display:flex;gap:18px;font-size:12px;color:#5a4c3e;margin-bottom:12px;}
+  .sw{width:10px;height:10px;border-radius:2px;display:inline-block;margin-right:5px;vertical-align:-1px;}
+  .ca-row{display:grid;grid-template-columns:150px 1fr;gap:12px;align-items:center;padding:7px 0;border-bottom:1px solid #EFE5D3;}
+  .ca-row:last-child{border-bottom:none;}
+  .ca-metric{font-size:12px;font-weight:700;color:#5a4c3e;}
+  .ca-bar-line{display:flex;align-items:center;gap:7px;margin-bottom:4px;}
+  .ca-bar-line:last-child{margin-bottom:0;}
+  .ca-tag{width:44px;font-size:10.5px;font-weight:700;text-align:right;font-family:'JetBrains Mono',monospace;}
+  .ca-tag.c1{color:var(--ca1);} .ca-tag.c2{color:var(--ca2);}
+  .ca-track{flex:1;height:12px;background:var(--bg-sunken);border-radius:4px;overflow:hidden;}
+  .ca-fill{height:100%;border-radius:4px;}
+  .ca-fill.c1{background:var(--ca1);} .ca-fill.c2{background:var(--ca2);}
+  .ca-val{width:88px;font-size:12px;text-align:right;}
+
+  section{margin-bottom:22px;}
+  .sec-note{font-size:11.5px;color:var(--tk-muted);margin-top:-8px;margin-bottom:12px;display:block;}
+
+  /* ── Bảng vấn đề & hành động đối ứng — dạng lưới kiểu Excel, sát ô ── */
+  #actionTbl{table-layout:fixed;border:1px solid #cbbfa6;}
+  #actionTbl th, #actionTbl td{border:1px solid #ddd0ba;padding:0;vertical-align:middle;}
+  #actionTbl th{padding:5px 6px;white-space:normal;line-height:1.25;text-align:center;}
+  #actionTbl tbody tr:nth-child(even){background:#FBF6EE;}
+  #actionTbl input, #actionTbl textarea{
+    width:100%;padding:5px 6px;font-size:12.5px;font-family:inherit;
+    border:none;border-radius:0;background:transparent;display:block;resize:none;line-height:1.3;
+  }
+  #actionTbl input{height:100%;}
+  #actionTbl textarea{min-height:30px;overflow:hidden;height:auto;}
+  #actionTbl .tacell{display:flex;align-items:center;height:100%;}
+  #actionTbl input:focus, #actionTbl textarea:focus{outline:2px solid var(--tk-orange);outline-offset:-2px;background:#fff;position:relative;z-index:1;}
+  #actionTbl input[type=number]{text-align:right;}
+  #actionTbl input[type=date]{padding:4px 4px;}
+  .stt-cell{text-align:center;font-weight:700;color:var(--tk-muted);padding:5px !important;}
+  .del-cell{text-align:center;padding:0 !important;}
+  .del-btn{background:none;border:none;color:var(--tk-bad);font-size:15px;cursor:pointer;padding:5px 6px;line-height:1;}
+  .draft-badge{display:inline-block;background:#fbf0d9;color:var(--tk-warn);font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;margin-bottom:10px;}
+  .saved-badge{display:inline-block;background:#e7f5ea;color:var(--tk-good);font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;margin-bottom:10px;}
+  .action-actions{display:flex;justify-content:space-between;align-items:center;margin-top:12px;flex-wrap:wrap;gap:10px;}
+
+  footer.note{margin-top:26px;padding-top:14px;border-top:1px solid var(--tk-line);font-size:11.5px;color:var(--tk-muted);line-height:1.6;}
+
+  /* ── 3 vấn đề lớn nhất (theo máy / loại vấn đề / mã SP) ── */
+  .subhead2{font-size:13px;font-weight:700;color:var(--tk-black);margin:18px 0 10px;}
+  .subhead2:first-of-type{margin-top:0;}
+  .cardgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;}
+  @media (max-width:820px){ .cardgrid{grid-template-columns:repeat(2,1fr);} }
+  @media (max-width:520px){ .cardgrid{grid-template-columns:1fr;} }
+  .pcard{background:#fff;border:1px solid var(--tk-line);border-radius:9px;padding:12px 14px 14px;}
+  .pcard-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:2px;}
+  .pcard-title{font-weight:700;font-size:13.5px;}
+  .pcard-sub{font-size:11px;color:var(--tk-muted);margin-bottom:8px;}
+  .pcard-total{font-size:11px;font-weight:700;color:var(--tk-orange-deep);white-space:nowrap;}
+  .pcard ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;}
+  .pcard li{display:flex;gap:7px;align-items:flex-start;font-size:12px;line-height:1.4;}
+  .rank2{flex:none;width:17px;height:17px;border-radius:50%;background:#EFE2CE;color:#6b5c4b;font-size:10px;font-weight:700;
+    display:flex;align-items:center;justify-content:center;margin-top:1px;font-family:'JetBrains Mono',monospace;}
+  .pcard li:nth-child(1) .rank2{background:#fbe9e7;color:var(--tk-bad);}
+  .pcard li:nth-child(2) .rank2{background:#fbf0d9;color:var(--tk-warn);}
+  .problem-txt{color:#4a3f33;flex:1;}
+  .problem-meta{color:var(--tk-muted);font-size:10.5px;white-space:nowrap;}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <div class="co">Toyotaki</div>
+      <div class="title" id="hdrTitle">Báo cáo sản xuất tuần</div>
+    </div>
+    <div class="header-group">
+      <span class="header-label">Kỳ</span>
+      <select class="header-select" id="fMode">
+        <option value="week">Tuần</option>
+        <option value="month">Tháng</option>
+      </select>
+    </div>
+    <div class="header-group">
+      <span class="header-label" id="fPeriodLabel">Tuần</span>
+      <input type="date" class="header-input" id="fMonday">
+      <input type="month" class="header-input" id="fMonth" style="display:none">
+    </div>
+    <button type="button" class="btn btn-ghost" id="btnPrevPeriod">◀ Trước</button>
+    <button type="button" class="btn btn-ghost" id="btnThisPeriod">Hiện tại</button>
+    <button type="button" class="btn btn-ghost" id="btnNextPeriod">Sau ▶</button>
+    <span id="weekBadge"></span>
+    <div class="header-clock">
+      <div class="date" id="hdrClockDate"></div>
+      <div class="time" id="hdrClockTime"></div>
+    </div>
+  </header>
+
+  <div class="msg" id="pageMsg" style="display:none"></div>
+
+  <div id="reportBody"></div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="shared/supabase-client.js"></script>
+<script src="shared/navbar.js"></script>
+<script>
+// ── Helpers ──────────────────────────────────────────────────────────────
+function pad(n){ return String(n).padStart(2,'0'); }
+function fmtISO(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
+function fmtVN(d){ return pad(d.getDate())+'/'+pad(d.getMonth()+1)+'/'+d.getFullYear(); }
+function addDays(d,n){ const r = new Date(d); r.setDate(r.getDate()+n); return r; }
+function mondayOf(d){ const r = new Date(d); const wd = (r.getDay()+6)%7; return addDays(r,-wd); }
+function monthStartOf(d){ return new Date(d.getFullYear(), d.getMonth(), 1); }
+function monthEndOf(d){ return new Date(d.getFullYear(), d.getMonth()+1, 0); }
+function addMonths(d,n){ return new Date(d.getFullYear(), d.getMonth()+n, 1); }
+function fmtMonthInput(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1); }
+function datesBetween(from,to){ const r=[]; let d=new Date(from); while(fmtISO(d)<=fmtISO(to)){ r.push(new Date(d)); d=addDays(d,1);} return r; }
+// Tất cả Thứ Hai (dạng Date) của các tuần có giao với khoảng [from,to] — dùng để
+// gom kế hoạch tuần (duc_khsx_tuan_plan, khoá theo tuan_bat_dau) khi kỳ báo cáo
+// là 1 tháng (thường trải qua 4-5 tuần khác nhau).
+function mondaysCovering(from,to){
+  const r = []; let m = mondayOf(from);
+  while (fmtISO(m) <= fmtISO(to)) { r.push(new Date(m)); m = addDays(m,7); }
+  return r;
+}
+function fmtNum(n){ return Math.round(Number(n)||0).toLocaleString('vi-VN'); }
+function fmtPct(n){ return (Number(n)||0).toFixed(1).replace('.',',')+'%'; }
+function escapeHtml(s){
+  if (s === null || s === undefined) return '';
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function pctPillClass(p){ return p >= 80 ? 'pct-good' : (p >= 65 ? 'pct-warn' : 'pct-bad'); }
+function normLoai(s){ return (s||'').replace(/\s*[-—–]\s*/g, ' - ').trim(); }
+function issueCode(s){ const m = normLoai(s).match(/^([A-Za-z]\d+)/); return m ? m[1] : (normLoai(s) || '(không rõ)'); }
+// Tên chuẩn theo mã lỗi — khớp CONFIG.LOAI_SU_CO ở duc-dashboard.html. Dùng làm
+// nhãn dự phòng khi duc_su_co_log.loai_su_co chỉ ghi trần mã, không kèm mô tả
+// (vd F1 do IPQC tự mở sự cố khi phát hiện NG).
+const SU_CO_TEN = {
+  A1:'Sự cố máy đúc', A2:'Sự cố khuôn', A3:'Sự cố hạ tầng (Điện, khí nén, nước...)',
+  B1:'Sự cố CL sản phẩm', B2:'Sự cố CL nguyên liệu',
+  C1:'Thay đổi KHSX', C2:'Hết nguyên liệu', C3:'Đổi khuôn',
+  D1:'Thiếu nhân lực', D2:'Đào tạo / Người mới',
+  E1:'Bảo dưỡng khuôn KH', E2:'Vệ sinh theo KH', E3:'Kiểm kê định kỳ',
+  F1:'Chất lượng - IPQC phát hiện NG',
+};
+function issueLabel(code, rows){
+  let label = SU_CO_TEN[code] ? (code + ' - ' + SU_CO_TEN[code]) : code;
+  for (const r of (rows || [])){ const l = normLoai(r.loai_su_co); if (l.length > label.length) label = l; }
+  return label;
+}
+function isoWeekNum(d){
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = (t.getUTCDay() + 6) % 7;
+  t.setUTCDate(t.getUTCDate() - dayNum + 3);
+  const firstThu = new Date(Date.UTC(t.getUTCFullYear(),0,4));
+  return 1 + Math.round(((t - firstThu) / 86400000 - 3 + (firstThu.getUTCDay()+6)%7) / 7);
+}
+function sumBy(arr, f){ return arr.reduce((s,r) => s + (f(r) || 0), 0); }
+function groupBy(arr, keyFn){
+  const m = new Map();
+  for (const r of arr){ const k = keyFn(r); if (!m.has(k)) m.set(k, []); m.get(k).push(r); }
+  return m;
+}
+function top3VanDe(rows){
+  const g = groupBy(rows, r => (r.van_de && r.van_de.trim()) || '(không ghi nội dung xử lý)');
+  const items = [...g.entries()].map(([label, rs]) => ({ label, phut: sumBy(rs, r=>r.thoi_gian_dung_phut), count: rs.length }));
+  items.sort((a,b) => b.phut - a.phut);
+  return items.slice(0,3);
+}
+const CA_HOP_LE = ['Ca 1','Ca 2','Ca ngày','Ca đêm'];
+// gộp theo cặp tương ứng: 2 ca 8h (Ca 1/Ca 2) và 2 ca 12h từ 24/08/2026 (Ca ngày/Ca đêm) — xem D30
+const CA_NHOM_1 = ['Ca 1','Ca ngày'], CA_NHOM_2 = ['Ca 2','Ca đêm'];
+
+// ── State ────────────────────────────────────────────────────────────────
+let currentMode = 'week';    // 'week' | 'month'
+let currentMonday = null;    // mode 'week': Thứ Hai của tuần đang xem
+let currentRefDate = null;   // mode 'month': ngày 1 của tháng đang xem
+let actionRows = [];      // dòng bảng hành động đang hiển thị (chỉnh sửa được) — chỉ áp dụng mode 'week'
+let actionRowsSaved = false; // đã có bản lưu trong Supabase cho tuần này chưa
+
+// ── Load & compute ──────────────────────────────────────────────────────
+// mode='week': refDate là bất kỳ ngày nào trong tuần (tự quy về Thứ Hai).
+// mode='month': refDate là bất kỳ ngày nào trong tháng (tự quy về ngày 1).
+async function loadPeriod(mode, refDate){
+  currentMode = mode;
+  let from, to, monday = null;
+  if (mode === 'week') {
+    monday = mondayOf(refDate);
+    currentMonday = monday; currentRefDate = monday;
+    from = monday; to = addDays(monday, 5);
+    document.getElementById('fMonday').value = fmtISO(monday);
+  } else {
+    const first = monthStartOf(refDate);
+    currentRefDate = first; currentMonday = null;
+    from = first; to = monthEndOf(first);
+    document.getElementById('fMonth').value = fmtMonthInput(first);
+  }
+  const fromISO = fmtISO(from), toISO = fmtISO(to);
+  const todayISO = fmtISO(new Date());
+  const isCurrentPeriod = todayISO >= fromISO && todayISO <= toISO;
+
+  document.getElementById('weekBadge').innerHTML = isCurrentPeriod
+    ? '<span class="week-badge live">' + (mode==='week'?'Tuần':'Tháng') + ' hiện tại — đang chạy</span>'
+    : '<span class="week-badge done">Đã hoàn tất</span>';
+  showMsg('info', '⏳ Đang tải dữ liệu ' + (mode==='week'?'tuần':'tháng') + ' ' + fmtVN(from) + ' – ' + fmtVN(to) + '…');
+  document.getElementById('reportBody').style.display = 'none';
+
+  const mondayList = (mode === 'week' ? [monday] : mondaysCovering(from, to)).map(fmtISO);
+
+  const [bccRes, sucoRes, lssxRes, chtRes, khsxRes, actionRes] = await Promise.all([
+    sb.from('duc_bao_cao_ca').select('ngay,ca,truong_ca,tong_kh_ca,tong_tt_ca,so_su_co_ca,tong_phut_dung_ca,tong_ng_ca')
+      .gte('ngay', fromISO).lte('ngay', toISO).in('ca', CA_HOP_LE),
+    sb.from('duc_su_co_log').select('ngay,ca,ma_may,ma_sp,ten_sp,loai_su_co,thoi_gian_dung_phut,van_de,truong_ca')
+      .gte('ngay', fromISO).lte('ngay', toISO).in('ca', CA_HOP_LE),
+    sb.from('duc_lich_su_san_xuat').select('ngay,ca,ma_may,ma_sp,ten_sp,kh_ca,tt_ca,so_luong_ng')
+      .gte('ngay', fromISO).lte('ngay', toISO).in('ca', CA_HOP_LE),
+    isCurrentPeriod
+      ? sb.from('duc_ca_hien_tai').select('ngay,ca,ma_may,ma_sp,ten_sp,kh_ca,tt_ca,so_luong_ng')
+          .eq('ngay', todayISO).in('ca', CA_HOP_LE)
+      : Promise.resolve({ data: [] }),
+    // kế hoạch tuần ĐÃ DUYỆT (khsx-tuan.html) — nguồn số "KH" của báo cáo, độc
+    // lập với KH ca trưởng ca có thể sửa tay ở duc-dashboard.html. Mode tháng
+    // gộp nhiều tuần (mondayList) — mỗi cột t2..t7 tự quy về đúng ngày dương
+    // lịch của tuần đó rồi chỉ lấy phần rơi vào tháng đang xem, xem computeAll.
+    sb.from('duc_khsx_tuan_plan').select('ma_sp,ten_sp,ma_may,tuan_bat_dau,t2,t3,t4,t5,t6,t7').in('tuan_bat_dau', mondayList),
+    mode === 'week'
+      ? sb.from('duc_bao_cao_tuan_van_de').select('*').eq('tuan_bat_dau', fromISO).order('stt')
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  if (bccRes.error || sucoRes.error || lssxRes.error || khsxRes.error) {
+    showMsg('error', 'Lỗi tải dữ liệu: ' + (bccRes.error || sucoRes.error || lssxRes.error || khsxRes.error).message);
+    return;
+  }
+
+  const bcc = bccRes.data || [];
+  const suco = sucoRes.data || [];
+  const lssx = lssxRes.data || [];
+  const khsx = khsxRes.data || [];
+  let cht = chtRes.data || [];
+  // tránh đếm trùng: chỉ lấy phần Ca đang chạy dở HÔM NAY (ca chưa có bản ghi kết ca)
+  const closedCaToday = new Set(bcc.filter(r => r.ngay === todayISO).map(r => r.ca));
+  cht = cht.filter(r => !closedCaToday.has(r.ca));
+
+  renderReport({ mode, monday, from, to, fromISO, toISO, isCurrentPeriod, todayISO, bcc, suco, lssx, cht, khsx });
+
+  // Hiện khối báo cáo TRƯỚC khi dựng bảng hành động — syncRowHeight() cần đo
+  // scrollHeight thật của các ô textarea, mà phần tử display:none luôn báo
+  // scrollHeight = 0, khiến chiều cao dòng bị "đóng băng" ở mức tối thiểu.
+  hideMsg();
+  document.getElementById('reportBody').style.display = 'block';
+
+  if (mode === 'week') {
+    actionRows = (actionRes.data || []).map(r => ({ ...r }));
+    actionRowsSaved = actionRows.length > 0;
+    if (!actionRowsSaved) actionRows = suggestActionRows(suco);
+    renderActionTable();
+  }
+}
+
+// Tên cột ngày trong duc_khsx_tuan_plan, thứ tự khớp index 0=Thứ 2..5=Thứ 7
+// (giống dayIdx ở duc-dashboard.html loadWeeklyPlanSuggestions). Mỗi dòng khsx
+// còn có tuan_bat_dau riêng (mode tháng gộp nhiều tuần) — cột i luôn ứng với
+// ngày dương lịch tuan_bat_dau + i (Thứ Hai + i).
+const KHSX_DAY_COLS = ['t2','t3','t4','t5','t6','t7'];
+
+// Quy đổi các dòng duc_khsx_tuan_plan (có thể thuộc nhiều tuần khác nhau) sang
+// KH theo TỪNG NGÀY DƯƠNG LỊCH thật, chỉ giữ phần rơi vào [from,to] — dùng
+// chung cho cả 2 mode (tuần: 1 tuần trọn vẹn nằm gọn trong from..to; tháng:
+// nhiều tuần, mỗi tuần chỉ đóng góp đúng những ngày thuộc tháng đang xem).
+function buildKhsxByDate(khsx, fromISO, toISO){
+  const khByDate = new Map();           // iso -> tổng KH mọi mã SP/máy
+  const byMaSp = new Map();             // ma_sp -> { ten_sp, total, byDate:Map }
+  const byMaMay = new Map();            // ma_may -> { total }
+  for (const row of khsx){
+    const monday = new Date(row.tuan_bat_dau + 'T00:00:00');
+    for (let i = 0; i < KHSX_DAY_COLS.length; i++){
+      const v = Number(row[KHSX_DAY_COLS[i]]) || 0;
+      if (!v) continue;
+      const iso = fmtISO(addDays(monday, i));
+      if (iso < fromISO || iso > toISO) continue;
+      khByDate.set(iso, (khByDate.get(iso)||0) + v);
+      if (row.ma_sp){
+        if (!byMaSp.has(row.ma_sp)) byMaSp.set(row.ma_sp, { ten_sp: row.ten_sp||'', total: 0, byDate: new Map() });
+        const o = byMaSp.get(row.ma_sp);
+        o.total += v; o.byDate.set(iso, (o.byDate.get(iso)||0) + v);
+        if (!o.ten_sp && row.ten_sp) o.ten_sp = row.ten_sp;
+      }
+      if (row.ma_may){
+        if (!byMaMay.has(row.ma_may)) byMaMay.set(row.ma_may, { total: 0 });
+        byMaMay.get(row.ma_may).total += v;
+      }
+    }
+  }
+  return { khByDate, byMaSp, byMaMay };
+}
+
+function computeAll(ctx){
+  const { mode, from, to, fromISO, toISO, isCurrentPeriod, todayISO, bcc, suco, lssx, cht, khsx } = ctx;
+  const { khByDate, byMaSp: khsxByMaSp, byMaMay: khsxByMaMay } = buildKhsxByDate(khsx, fromISO, toISO);
+
+  // ── theo ngày (KH lấy từ kế hoạch tuần đã duyệt, TT lấy từ thực tế đã kết ca) ──
+  const allDates = datesBetween(from, to);
+  const days = allDates.map(d => {
+    const iso = fmtISO(d);
+    const rowsBcc = bcc.filter(r => r.ngay === iso);
+    let kh = khByDate.get(iso) || 0, tt = sumBy(rowsBcc, r => r.tong_tt_ca);
+    let sc = sumBy(rowsBcc, r => r.so_su_co_ca), phut = sumBy(rowsBcc, r => r.tong_phut_dung_ca), ng = sumBy(rowsBcc, r => r.tong_ng_ca);
+    const isToday = isCurrentPeriod && iso === todayISO;
+    if (isToday){
+      const chtDay = cht.filter(r => r.ngay === iso);
+      tt += sumBy(chtDay, r => r.tt_ca);
+    }
+    const isFuture = iso > todayISO;
+    return { date: d, iso, kh, tt, htPct: kh > 0 ? tt/kh*100 : 0, sc, phut, ng, isToday, isFuture };
+  });
+  // Lấy max của CẢ kh lẫn tt (không chỉ kh) — nếu cả kỳ không có kế hoạch KHSX
+  // (kh=0 mọi ngày, ví dụ tuần chưa được lập kế hoạch) mà vẫn sàn max về 1 thì
+  // cột TT thật sẽ bị tính thành hàng nghìn % chiều cao, tràn lên đè cả header.
+  const maxKh = Math.max(1, ...days.map(d => Math.max(d.kh, d.tt)));
+
+  // ── KPI tuần — KH lấy từ kế hoạch tuần đã duyệt (cả tuần, kể cả ngày chưa
+  // tới); TT/sự cố/dừng máy vẫn chỉ tính ca đã kết ca ──
+  const totalKh = days.reduce((s,d) => s+d.kh, 0), totalTt = sumBy(bcc, r=>r.tong_tt_ca);
+  const totalSc = sumBy(bcc, r=>r.so_su_co_ca), totalPhut = sumBy(bcc, r=>r.tong_phut_dung_ca), totalNg = sumBy(bcc, r=>r.tong_ng_ca);
+  // Hoàn thành KH = tổng TT các ca đã kết ca ÷ tổng KH (theo KHSX tuần đã
+  // duyệt, cột t2..t7) của những NGÀY đã có ít nhất 1 ca kết ca — không tính
+  // ngày chưa kết ca nào. Tỷ lệ gộp có trọng số, không phải trung bình các %.
+  const closedDayIsos = new Set(bcc.map(r=>r.ngay));
+  const nDaysClosed = closedDayIsos.size;
+  const khClosedDays = days.filter(d => closedDayIsos.has(d.iso)).reduce((s,d) => s + d.kh, 0);
+  const avgHt = khClosedDays > 0 ? totalTt / khClosedDays * 100 : 0;
+
+  // ── 3 ca yếu nhất ──
+  const worstShifts = bcc.filter(r=>r.tong_kh_ca>0)
+    .map(r => ({ ...r, ht: r.tong_tt_ca/r.tong_kh_ca*100 }))
+    .sort((a,b) => a.ht - b.ht).slice(0,3);
+
+  // ── Ca 1 vs Ca 2 — gộp theo cặp tương ứng (CA_NHOM_1/CA_NHOM_2) để so sánh
+  // xuyên cả 2 phương án ca, xem khai báo global ở trên
+  const caGroups = groupBy(bcc, r=>CA_NHOM_1.includes(r.ca) ? 1 : 2);
+  const sucoByCa = groupBy(suco, r=>CA_NHOM_1.includes(r.ca) ? 1 : 2);
+  // B1/B2 = sự cố CL sản phẩm/nguyên liệu, F1 = IPQC phát hiện NG (xem CONFIG.LOAI_SU_CO ở duc-dashboard.html)
+  const QUALITY_CODES = ['B1','B2','F1'];
+  // A2 = Sự cố khuôn (khác C3 "Đổi khuôn" — đó là thời gian chuẩn bị/thay khuôn theo kế hoạch, đã tính riêng)
+  const MOLD_CODES = ['A2'];
+  function sucoDowntimeByCode(nhom, codes){
+    const rs = sucoByCa.get(nhom) || [];
+    return sumBy(rs.filter(r => codes.includes(issueCode(r.loai_su_co))), r=>r.thoi_gian_dung_phut);
+  }
+  function caStat(nhom){
+    const rs = caGroups.get(nhom) || [];
+    const kh = sumBy(rs,r=>r.tong_kh_ca), tt = sumBy(rs,r=>r.tong_tt_ca);
+    const c3rowsCa = (sucoByCa.get(nhom) || []).filter(r => issueCode(r.loai_su_co) === 'C3');
+    const phutDoiKhuon = sumBy(c3rowsCa, r=>r.thoi_gian_dung_phut);
+    return { n: rs.length, kh, tt, ht: kh>0?tt/kh*100:0, phut: sumBy(rs,r=>r.tong_phut_dung_ca),
+      sc: sumBy(rs,r=>r.so_su_co_ca), scPerCa: rs.length? sumBy(rs,r=>r.so_su_co_ca)/rs.length:0, ng: sumBy(rs,r=>r.tong_ng_ca),
+      phutCL: sucoDowntimeByCode(nhom, QUALITY_CODES), phutKhuon: sucoDowntimeByCode(nhom, MOLD_CODES),
+      soLanDoiKhuon: c3rowsCa.length, avgDoiKhuon: c3rowsCa.length ? phutDoiKhuon/c3rowsCa.length : 0 };
+  }
+  const ca1 = caStat(1), ca2 = caStat(2);
+
+  // ── Dừng máy theo máy ──
+  const byMay = groupBy(suco, r=>r.ma_may);
+  const downtimeMachine = [...byMay.entries()].map(([ma_may, rs]) => ({
+    ma_may, phut: sumBy(rs,r=>r.thoi_gian_dung_phut), count: rs.length, top3: top3VanDe(rs),
+  })).sort((a,b)=> b.phut - a.phut);
+  const totalDowntimeSuco = sumBy(suco, r=>r.thoi_gian_dung_phut);
+
+  // ── Dừng máy theo loại vấn đề (gộp mã trùng, ưu tiên nhãn có mô tả dài nhất) ──
+  const byIssue = groupBy(suco, r=>issueCode(r.loai_su_co));
+  const downtimeIssue = [...byIssue.entries()].map(([code, rs]) => (
+    { code, label: issueLabel(code, rs), phut: sumBy(rs,r=>r.thoi_gian_dung_phut), count: rs.length, top3: top3VanDe(rs) }
+  )).sort((a,b)=> b.phut - a.phut);
+
+  // ── Dừng máy theo mã SP ──
+  const bySp = groupBy(suco, r=>r.ma_sp || '(không rõ)');
+  const downtimeProduct = [...bySp.entries()].map(([ma_sp, rs]) => ({
+    ma_sp, ten_sp: rs[0].ten_sp || '', phut: sumBy(rs,r=>r.thoi_gian_dung_phut), count: rs.length, top3: top3VanDe(rs),
+  })).sort((a,b)=> b.phut - a.phut);
+
+  // ── Sản lượng theo máy / mã SP — KH từ kế hoạch tuần đã duyệt (duc_khsx_tuan_plan),
+  // TT vẫn từ thực tế đã ghi nhận (lssx + cht hôm nay) ──
+  const prodRows = lssx.concat(cht);
+  const prodByMay = groupBy(prodRows, r=>r.ma_may);
+  const allMachines = new Set([...khsxByMaMay.keys(), ...prodByMay.keys()]);
+  const prodMachine = [...allMachines].map(ma_may => {
+    const kh = (khsxByMaMay.get(ma_may) || {}).total || 0;
+    const rs = prodByMay.get(ma_may) || [];
+    const tt = sumBy(rs,r=>r.tt_ca);
+    return { ma_may, kh, tt, ng: sumBy(rs,r=>r.so_luong_ng), ht: kh>0?tt/kh*100:0, shortfall: kh-tt };
+  }).sort((a,b)=> b.ht - a.ht);
+  const dayIsos = days.map(d=>d.iso);
+  const prodBySp = groupBy(prodRows, r=>r.ma_sp);
+  const allProducts = new Set([...khsxByMaSp.keys(), ...prodBySp.keys()]);
+  const prodProduct = [...allProducts].map(ma_sp => {
+    const khsxEntry = khsxByMaSp.get(ma_sp);
+    const rs = prodBySp.get(ma_sp) || [];
+    const kh = khsxEntry ? khsxEntry.total : 0, tt = sumBy(rs,r=>r.tt_ca);
+    const byDay = dayIsos.map(iso => {
+      const dayRs = rs.filter(r=>r.ngay===iso);
+      return { iso, kh: khsxEntry ? (khsxEntry.byDate.get(iso)||0) : 0, tt: sumBy(dayRs,r=>r.tt_ca) };
+    });
+    const ten_sp = (rs[0] && rs[0].ten_sp) || (khsxEntry && khsxEntry.ten_sp) || '';
+    return { ma_sp, ten_sp, kh, tt, ng: sumBy(rs,r=>r.so_luong_ng), ht: kh>0?tt/kh*100:0, shortfall: kh-tt, byDay };
+  }).sort((a,b)=> b.ht - a.ht);
+
+  return { days, maxKh, totalKh, totalTt, totalSc, totalPhut, totalNg, avgHt, nDaysClosed, worstShifts,
+    ca1, ca2, downtimeMachine, downtimeIssue, downtimeProduct, totalDowntimeSuco, prodMachine, prodProduct };
+}
+
+// ── Render ───────────────────────────────────────────────────────────────
+function renderReport(ctx){
+  const c = computeAll(ctx);
+  const isMonth = ctx.mode === 'month';
+  const periodWord = isMonth ? 'tháng' : 'tuần';
+  const periodTitle = isMonth
+    ? 'Tháng ' + (ctx.from.getMonth()+1) + '/' + ctx.from.getFullYear()
+    : 'Tuần ' + isoWeekNum(ctx.monday);
+  document.getElementById('hdrTitle').textContent = 'Báo cáo sản xuất ' + periodWord;
+
+  let html = '';
+  html += '<div class="card"><h2>' + periodTitle + ' — ' + escapeHtml(fmtVN(ctx.from)) + ' đến ' + escapeHtml(fmtVN(ctx.to)) + '</h2>';
+  html += '<div class="kpis">' +
+    kpi('Kế hoạch ' + periodWord, fmtNum(c.totalKh), c.nDaysClosed + ' ngày đã kết ca', '') +
+    kpi('Thực tế ' + periodWord, fmtNum(c.totalTt), fmtPct(c.totalKh>0?c.totalTt/c.totalKh*100:0) + ' kế hoạch', '') +
+    kpi('Hoàn thành KH', fmtPct(c.avgHt), 'TT ÷ KH ' + periodWord + ' · ' + c.nDaysClosed + ' ngày đã kết ca', '') +
+    kpi('Thời gian dừng', fmtNum(c.totalPhut) + "'", (c.totalPhut/60).toFixed(1) + ' giờ · ' + fmtNum(c.totalSc) + ' sự cố', 'bad') +
+    kpi('Sản phẩm lỗi (NG)', fmtNum(c.totalNg), '', '') +
+    kpi('Sự cố / ngày', c.nDaysClosed ? (c.totalSc/c.nDaysClosed).toFixed(1).replace('.',',') : '0', 'trung bình ' + c.nDaysClosed + ' ngày', '') +
+  '</div></div>';
+
+  // Diễn biến theo ngày — mode tháng có thể tới 31 ngày, dùng dải cuộn ngang
+  // thay vì lưới cố định 6 cột của mode tuần.
+  html += '<div class="card"><h3>Diễn biến theo ngày</h3><span class="sec-note">KH theo kế hoạch ' + periodWord + ' đã duyệt, TT các ca đã kết ca</span>';
+  html += '<div class="daytrend' + (isMonth?' month':'') + '">' + c.days.map(d => {
+    const khH = Math.round(d.kh/c.maxKh*100), ttH = Math.round(d.tt/c.maxKh*100);
+    const wd = ['CN','T2','T3','T4','T5','T6','T7'][d.date.getDay()];
+    if (d.isFuture) return '<div class="day"><div class="day-date">' + pad(d.date.getDate())+'/'+pad(d.date.getMonth()+1) + '</div><div class="day-wd">' + wd + '</div><div style="height:60px;margin:8px 0 6px;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:11px">chưa tới</div></div>';
+    return '<div class="day' + (d.isToday?' today':'') + '"><div class="day-date">' + pad(d.date.getDate())+'/'+pad(d.date.getMonth()+1) + '</div><div class="day-wd">' + wd + (d.isToday?' · đang chạy':'') + '</div>' +
+      '<div class="day-bars"><div class="day-bar kh" style="height:' + khH + '%"></div><div class="day-bar tt" style="height:' + ttH + '%"></div></div>' +
+      '<div class="day-ht">' + (d.isToday ? 'tạm tính' : 'HT <b>' + fmtPct(d.htPct) + '</b>') + '</div></div>';
+  }).join('') + '</div>';
+  if (c.worstShifts.length) {
+    html += priorityBox('3 ca yếu nhất ' + periodWord + ' — ưu tiên xem lại', c.worstShifts.map(s => {
+      const top3 = top3VanDe(ctx.suco.filter(r => r.ngay === s.ngay && r.ca === s.ca));
+      return '<b>' + escapeHtml(s.ca) + ' · ' + escapeHtml(fmtVN(new Date(s.ngay+'T00:00:00'))) + '</b> (' + escapeHtml(s.truong_ca||'—') + ')' +
+        ' <span class="pm">— hoàn thành ' + fmtPct(s.ht) + ' KH, ' + fmtNum(s.so_su_co_ca) + ' sự cố, ' + fmtNum(s.tong_phut_dung_ca) + "' dừng máy</span>" +
+        '<div class="lydo">Lý do ảnh hưởng nhiều nhất là: ' + lyDoAnhHuong({ top3 }) + '</div>';
+    }));
+  }
+  html += '</div>';
+
+  // Sản lượng theo mã SP — bảng chi tiết theo từng ngày (T2..T7) chỉ hợp lý
+  // với mode tuần (≤6 cột); mode tháng gộp về tổng KH/TT/Hoàn thành như bảng
+  // "theo máy" bên dưới, tránh bảng rộng 28-31 cột không đọc được.
+  html += '<div class="card"><h3>Sản lượng theo mã sản phẩm</h3><span class="sec-note">KH theo kế hoạch ' + periodWord + ' đã duyệt, TT cộng dồn thực tế — xếp theo % hoàn thành giảm dần' + (isMonth ? '' : '. Mỗi mã SP có 2 dòng: KH ở trên, TT ở dưới.') + '</span>';
+  if (isMonth) {
+    html += tableWrap(['Mã SP','Tên sản phẩm','Kế hoạch','Thực tế','Hoàn thành','NG'],
+      c.prodProduct.map(p => '<tr><td class="rowname">' + escapeHtml(p.ma_sp) + '</td><td class="rowsub">' + escapeHtml(p.ten_sp) + '</td>' +
+        '<td class="num">' + fmtNum(p.kh) + '</td><td class="num">' + fmtNum(p.tt) + '</td>' +
+        '<td class="num"><span class="pct-pill ' + pctPillClass(p.ht) + '">' + fmtPct(p.ht) + '</span></td><td class="num">' + fmtNum(p.ng) + '</td></tr>').join(''));
+  } else {
+    const dayNamesShort = ['T2','T3','T4','T5','T6','T7'];
+    const dayHeaders = c.days.map((d,i) => dayNamesShort[i] + '<br><span style="font-weight:400;font-size:9px;color:var(--tk-muted)">' + pad(d.date.getDate()) + '/' + pad(d.date.getMonth()+1) + '</span>');
+    html += tableWrap(['Mã SP','Tên sản phẩm','', ...dayHeaders, 'Tổng','Hoàn thành'],
+      c.prodProduct.map(p =>
+        '<tr class="sp-row-kh"><td class="rowname" rowspan="2">' + escapeHtml(p.ma_sp) + '</td><td class="rowsub" rowspan="2">' + escapeHtml(p.ten_sp) + '</td>' +
+        '<td class="rowsub">KH</td>' + p.byDay.map(d => '<td class="num">' + (d.kh ? fmtNum(d.kh) : '') + '</td>').join('') +
+        '<td class="num">' + fmtNum(p.kh) + '</td>' +
+        '<td class="num" rowspan="2"><span class="pct-pill ' + pctPillClass(p.ht) + '">' + fmtPct(p.ht) + '</span></td></tr>' +
+        '<tr class="sp-row-tt"><td class="rowsub">TT</td>' + p.byDay.map(d => '<td class="num">' + (d.tt ? fmtNum(d.tt) : '') + '</td>').join('') +
+        '<td class="num">' + fmtNum(p.tt) + '</td></tr>').join(''));
+  }
+  const downtimeBySp = new Map(c.downtimeProduct.map(x=>[x.ma_sp,x]));
+  const spKemNhat = c.prodProduct.filter(p=>p.kh>0).slice().sort((a,b)=>a.ht-b.ht).slice(0,3);
+  if (spKemNhat.length) html += priorityBox('3 mã sản phẩm không đạt nhiều nhất (theo % hoàn thành kế hoạch)', spKemNhat.map(p =>
+    '<b>Mã ' + escapeHtml(p.ma_sp) + (p.ten_sp?(' · '+escapeHtml(p.ten_sp)):'') + '</b> <span class="pm">— đạt ' + fmtPct(p.ht) + ' KH (' + fmtNum(p.tt) + '/' + fmtNum(p.kh) + ')</span>' +
+    '<div class="lydo">Lý do ảnh hưởng nhiều nhất là: ' + lyDoAnhHuong(downtimeBySp.get(p.ma_sp)) + '</div>'));
+  html += '</div>';
+
+  // Sản lượng theo máy
+  html += '<div class="card"><h3>Sản lượng theo máy</h3><span class="sec-note">KH theo kế hoạch tuần đã duyệt, TT cộng dồn thực tế — xếp theo % hoàn thành giảm dần</span>';
+  html += tableWrap(['Máy','Kế hoạch','Thực tế','Hoàn thành','NG'],
+    c.prodMachine.map(p => '<tr><td class="rowname">' + escapeHtml(p.ma_may) + '</td>' +
+      '<td class="num">' + fmtNum(p.kh) + '</td><td class="num">' + fmtNum(p.tt) + '</td>' +
+      '<td class="num"><span class="pct-pill ' + pctPillClass(p.ht) + '">' + fmtPct(p.ht) + '</span></td><td class="num">' + fmtNum(p.ng) + '</td></tr>').join(''));
+  const downtimeByMay = new Map(c.downtimeMachine.map(x=>[x.ma_may,x]));
+  const maKemNhat = c.prodMachine.filter(p=>p.kh>0).slice().sort((a,b)=>a.ht-b.ht).slice(0,3);
+  if (maKemNhat.length) html += priorityBox('3 máy không đạt nhiều nhất (theo % hoàn thành kế hoạch)', maKemNhat.map(p =>
+    '<b>Máy ' + escapeHtml(p.ma_may) + '</b> <span class="pm">— đạt ' + fmtPct(p.ht) + ' KH (' + fmtNum(p.tt) + '/' + fmtNum(p.kh) + ')</span>' +
+    '<div class="lydo">Lý do ảnh hưởng nhiều nhất là: ' + lyDoAnhHuong(downtimeByMay.get(p.ma_may)) + '</div>'));
+  html += '</div>';
+
+  // Dừng máy theo máy
+  html += '<div class="card"><h3>Thời gian dừng theo máy</h3><span class="sec-note">Tổng ' + fmtNum(c.totalDowntimeSuco) + " phút · " + fmtNum(sumBy(c.downtimeMachine,x=>x.count)) + ' lượt sự cố</span>';
+  const maxMachinePhut = Math.max(1, ...c.downtimeMachine.map(x=>x.phut));
+  html += tableWrap(['Máy','Phút dừng','Lượt','Tỉ trọng'], c.downtimeMachine.map(x =>
+    '<tr><td class="rowname">' + escapeHtml(x.ma_may) + '</td><td>' + barCell(x.phut, maxMachinePhut) + '</td>' +
+    '<td class="num">' + x.count + '</td><td class="num">' + fmtPct(c.totalDowntimeSuco>0?x.phut/c.totalDowntimeSuco*100:0) + '</td></tr>').join(''));
+  if (c.downtimeMachine.length) html += priorityBox('3 máy ưu tiên xử lý', c.downtimeMachine.slice(0,3).map(x =>
+    '<b>' + escapeHtml(x.ma_may) + '</b> <span class="pm">— ' + fmtNum(x.phut) + "' (" + x.count + ' lượt)</span>' +
+    '<div class="lydo">Lý do ảnh hưởng nhiều nhất là: ' + lyDoAnhHuong(x) + '</div>'));
+  html += '</div>';
+
+  // Dừng máy theo loại vấn đề
+  html += '<div class="card"><h3>Thời gian dừng theo chủng loại vấn đề</h3><span class="sec-note">Xếp theo tổng phút dừng</span>';
+  const maxIssuePhut = Math.max(1, ...c.downtimeIssue.map(x=>x.phut));
+  html += tableWrap(['Mã lỗi','Phút dừng','Lượt','Tỉ trọng'], c.downtimeIssue.map(x =>
+    '<tr><td class="rowname">' + escapeHtml(x.label) + '</td><td>' + barCell(x.phut, maxIssuePhut) + '</td>' +
+    '<td class="num">' + x.count + '</td><td class="num">' + fmtPct(c.totalDowntimeSuco>0?x.phut/c.totalDowntimeSuco*100:0) + '</td></tr>').join(''));
+  if (c.downtimeIssue.length) html += priorityBox('3 loại vấn đề ưu tiên xử lý', c.downtimeIssue.slice(0,3).map(x =>
+    '<b>' + escapeHtml(x.label) + '</b> <span class="pm">— ' + fmtNum(x.phut) + "' (" + fmtPct(c.totalDowntimeSuco>0?x.phut/c.totalDowntimeSuco*100:0) + ')</span>' +
+    '<div class="lydo">Lý do ảnh hưởng nhiều nhất là: ' + lyDoAnhHuong(x) + '</div>'));
+  html += '</div>';
+
+  // So sánh Ca 1 / Ca 2 (gộp cả tên "Ca ngày"/"Ca đêm" nếu tuần dùng phương án 2 ca 12h)
+  const CA1_LABEL = 'Ca 1/Ngày', CA2_LABEL = 'Ca 2/Đêm';
+  html += '<div class="card"><h3>So sánh hiệu suất ' + CA1_LABEL + ' và ' + CA2_LABEL + '</h3><span class="sec-note">' + c.ca1.n + ' ca ' + CA1_LABEL + ', ' + c.ca2.n + ' ca ' + CA2_LABEL + ' — chỉ ca đã kết ca</span>';
+  html += '<div class="ca-legend"><span><span class="sw" style="background:var(--ca1)"></span><b>' + CA1_LABEL + '</b> — ' + fmtNum(c.ca1.kh) + ' KH</span>' +
+    '<span><span class="sw" style="background:var(--ca2)"></span><b>' + CA2_LABEL + '</b> — ' + fmtNum(c.ca2.kh) + ' KH</span></div>';
+  const maxHt = Math.max(c.ca1.ht, c.ca2.ht, 1), maxPhut = Math.max(c.ca1.phut, c.ca2.phut, 1), maxSc = Math.max(c.ca1.scPerCa, c.ca2.scPerCa, .1);
+  const maxPhutCL = Math.max(c.ca1.phutCL, c.ca2.phutCL, 1), maxPhutKhuon = Math.max(c.ca1.phutKhuon, c.ca2.phutKhuon, 1);
+  const maxAvgDoiKhuon = Math.max(c.ca1.avgDoiKhuon, c.ca2.avgDoiKhuon, 1);
+  html += caRow('Hoàn thành KH', c.ca1.ht/maxHt*100, fmtPct(c.ca1.ht), c.ca2.ht/maxHt*100, fmtPct(c.ca2.ht));
+  html += caRow('Phút dừng máy', c.ca1.phut/maxPhut*100, fmtNum(c.ca1.phut)+"'", c.ca2.phut/maxPhut*100, fmtNum(c.ca2.phut)+"'");
+  html += caRow('Số sự cố / ca', c.ca1.scPerCa/maxSc*100, c.ca1.scPerCa.toFixed(1).replace('.',',')+' lượt', c.ca2.scPerCa/maxSc*100, c.ca2.scPerCa.toFixed(1).replace('.',',')+' lượt');
+  html += caRow('Dừng do vấn đề chất lượng', c.ca1.phutCL/maxPhutCL*100, fmtNum(c.ca1.phutCL)+"'", c.ca2.phutCL/maxPhutCL*100, fmtNum(c.ca2.phutCL)+"'");
+  html += caRow('Dừng do sự cố khuôn', c.ca1.phutKhuon/maxPhutKhuon*100, fmtNum(c.ca1.phutKhuon)+"'", c.ca2.phutKhuon/maxPhutKhuon*100, fmtNum(c.ca2.phutKhuon)+"'");
+  html += caRow('Đổi khuôn TB/lần', c.ca1.avgDoiKhuon/maxAvgDoiKhuon*100, c.ca1.avgDoiKhuon.toFixed(1).replace('.',',')+"' (" + c.ca1.soLanDoiKhuon + ' lần)', c.ca2.avgDoiKhuon/maxAvgDoiKhuon*100, c.ca2.avgDoiKhuon.toFixed(1).replace('.',',')+"' (" + c.ca2.soLanDoiKhuon + ' lần)');
+  html += caRow('NG (sản phẩm)', c.ca1.ng/Math.max(c.ca1.ng,c.ca2.ng,1)*100, fmtNum(c.ca1.ng), c.ca2.ng/Math.max(c.ca1.ng,c.ca2.ng,1)*100, fmtNum(c.ca2.ng));
+  if (c.ca1.n > 0 && c.ca2.n > 0 && c.ca1.ht !== c.ca2.ht) {
+    const caKemHon = c.ca1.ht <= c.ca2.ht ? CA1_LABEL : CA2_LABEL;
+    const caTotHon = caKemHon === CA1_LABEL ? CA2_LABEL : CA1_LABEL;
+    const statKem = caKemHon === CA1_LABEL ? c.ca1 : c.ca2, statTot = caKemHon === CA1_LABEL ? c.ca2 : c.ca1;
+    const nhomCaKem = caKemHon === CA1_LABEL ? CA_NHOM_1 : CA_NHOM_2;
+    const top3CaKem = top3VanDe(ctx.suco.filter(r => nhomCaKem.includes(r.ca)));
+    html += priorityBox(caKemHon + ' đang hoàn thành kế hoạch thấp hơn ' + caTotHon, [
+      '<span class="pm">' + caKemHon + ' đạt ' + fmtPct(statKem.ht) + ' KH so với ' + fmtPct(statTot.ht) + ' KH của ' + caTotHon + '</span>' +
+      '<div class="lydo">Lý do ảnh hưởng nhiều nhất là: ' + lyDoAnhHuong({ top3: top3CaKem }) + '</div>'
+    ]);
+  }
+  html += '</div>';
+
+  // Dừng máy theo mã SP
+  html += '<div class="card"><h3>Thời gian dừng theo mã sản phẩm</h3><span class="sec-note">10 mã có phút dừng cao nhất tuần</span>';
+  const maxProdPhut = Math.max(1, ...c.downtimeProduct.map(x=>x.phut));
+  html += tableWrap(['Mã SP','Tên sản phẩm','Phút dừng','Lượt'], c.downtimeProduct.slice(0,10).map(x =>
+    '<tr><td class="rowname">' + escapeHtml(x.ma_sp) + '</td><td class="rowsub">' + escapeHtml(x.ten_sp) + '</td>' +
+    '<td>' + barCell(x.phut, maxProdPhut) + '</td><td class="num">' + x.count + '</td></tr>').join(''));
+  if (c.downtimeProduct.length) html += priorityBox('3 mã sản phẩm ưu tiên xử lý', c.downtimeProduct.slice(0,3).map(x =>
+    '<b>' + escapeHtml(x.ma_sp) + ' · ' + escapeHtml(x.ten_sp) + '</b> <span class="pm">— ' + fmtNum(x.phut) + "' (" + x.count + ' lượt)</span>' +
+    '<div class="lydo">Lý do ảnh hưởng nhiều nhất là: ' + lyDoAnhHuong(x) + '</div>'));
+  html += '</div>';
+
+  // 3 vấn đề lớn nhất bên trong từng máy / loại vấn đề / mã SP
+  html += '<div class="card"><h3>3 vấn đề lớn nhất bên trong từng máy / loại vấn đề / mã sản phẩm</h3>' +
+    '<span class="sec-note">Xếp theo phút dừng cộng dồn của đúng nội dung "vấn đề" ghi trong nhật ký sự cố</span>';
+  html += '<div class="subhead2">Theo máy (' + c.downtimeMachine.length + ' máy có dừng máy trong tuần)</div>';
+  html += '<div class="cardgrid">' + c.downtimeMachine.map(x => pcard(x.ma_may, null, x.phut, x.count, x.top3)).join('') + '</div>';
+  html += '<div class="subhead2">Theo loại vấn đề (' + c.downtimeIssue.length + ' loại phát sinh trong tuần)</div>';
+  html += '<div class="cardgrid">' + c.downtimeIssue.map(x => pcard(x.label, null, x.phut, x.count, x.top3)).join('') + '</div>';
+  html += '<div class="subhead2">Theo mã sản phẩm (' + c.downtimeProduct.length + ' mã có phát sinh dừng máy trong tuần)</div>';
+  html += '<div class="cardgrid">' + c.downtimeProduct.map(x => pcard(x.ma_sp, x.ten_sp, x.phut, x.count, x.top3)).join('') + '</div>';
+  html += (c.downtimeMachine.length===0 && c.downtimeIssue.length===0) ? '<div class="rowsub">Không có sự cố dừng máy nào trong tuần.</div>' : '';
+  html += '</div>';
+
+  document.getElementById('reportBody').innerHTML = html;
+
+  // gắn lại footer + bảng hành động (được render riêng, ngoài innerHTML này)
+  const foot = document.createElement('footer');
+  foot.className = 'note';
+  foot.innerHTML = 'Nguồn: duc_khsx_tuan_plan (số KH' + (isMonth ? ', gộp mọi tuần có giao với tháng' : '') + ') · duc_bao_cao_ca · duc_su_co_log · duc_lich_su_san_xuat (số TT)' + (ctx.isCurrentPeriod ? ' · duc_ca_hien_tai (phần đang chạy hôm nay, tạm tính)' : '') +
+    '. Gồm các ca chuẩn của cả 2 phương án ca (Ca 1/Ca 2 — 2 ca 8h, hoặc Ca ngày/Ca đêm — 2 ca 12h từ 24/08/2026). Số KH lấy nguyên từ kế hoạch tuần đã duyệt (không đổi dù trưởng ca có sửa KH ca trên dashboard); riêng khối "So sánh Ca 1/Ca 2" dùng KH ca đã chốt lúc kết ca vì kế hoạch tuần không chia theo ca. TT chỉ gồm các ca đã kết ca; bảng dừng máy chi tiết dùng nhật ký sự cố nên có thể bao gồm cả sự cố của ca đang chạy hôm nay.' +
+    (isMonth ? ' Bảng "Tổng hợp vấn đề và hành động đối ứng" hiện chỉ lưu được theo tuần — chuyển sang chế độ Tuần để ghi/sửa bảng đó.' : '');
+
+  document.getElementById('reportBody').appendChild(foot);
+
+  if (!isMonth) {
+    const actionCard = document.createElement('div');
+    actionCard.className = 'card';
+    actionCard.id = 'actionCard';
+    actionCard.innerHTML = '<h2>📋 Tổng hợp vấn đề và hành động đối ứng</h2>' +
+      '<div id="actionBadge"></div>' +
+      '<div class="tbl-wrap"><table id="actionTbl"><thead><tr>' +
+      '<th style="width:32px">Stt</th><th style="width:160px">Vấn đề</th><th style="width:78px">Số phút dừng</th>' +
+      '<th style="width:68px">%/tổng số</th><th style="width:220px">Nguyên nhân</th><th style="width:220px">Đối sách</th>' +
+      '<th style="width:110px">Đảm nhiệm</th><th style="width:106px">Thời hạn</th><th style="width:26px"></th>' +
+      '</tr></thead><tbody id="actionTblBody"></tbody></table></div>' +
+      '<div class="action-actions">' +
+      '<button type="button" class="outline small" id="btnAddRow">+ Thêm dòng</button>' +
+      '<button type="button" id="btnSaveAction">💾 Lưu dữ liệu</button>' +
+      '</div><div class="msg" id="actionMsg" style="display:none"></div>';
+
+    document.getElementById('reportBody').insertBefore(actionCard, foot);
+
+    document.getElementById('btnAddRow').onclick = () => { actionRows.push(blankActionRow()); renderActionTable(); };
+    document.getElementById('btnSaveAction').onclick = saveActionRows;
+  }
+}
+
+function kpi(label, val, sub, cls){
+  return '<div class="kpi' + (cls?(' '+cls):'') + '"><div class="k">' + escapeHtml(label) + '</div><div class="v num">' + val + '</div><div class="s">' + escapeHtml(sub) + '</div></div>';
+}
+function tableWrap(headers, rowsHtml){
+  return '<div class="tbl-wrap"><table><thead><tr>' + headers.map((h,i) => '<th' + (i>1?' class="num"':'') + '>' + h + '</th>').join('') +
+    '</tr></thead><tbody>' + (rowsHtml || '<tr><td colspan="' + headers.length + '" class="rowsub" style="font-style:italic">Không có dữ liệu.</td></tr>') + '</tbody></table></div>';
+}
+function barCell(val, max){
+  const w = Math.max(2, Math.round(val/max*100));
+  return '<div class="barcell"><div class="bartrack"><div class="barfill" style="width:' + w + '%"></div></div><span class="barval num">' + fmtNum(val) + "'</span></div>";
+}
+function priorityBox(title, itemsHtml){
+  return '<div class="priority-box"><div class="ph">🎯 ' + escapeHtml(title) + '</div><ol>' +
+    itemsHtml.map((h,i) => '<li><span class="prank">' + (i+1) + '</span><div>' + h + '</div></li>').join('') + '</ol></div>';
+}
+// Liệt kê a) b) c) nguyên nhân ảnh hưởng nhiều nhất cho 1 mã SP/máy, lấy từ
+// top3VanDe (tổng hợp thật từ trường "van_de" trong nhật ký sự cố của tuần)
+// — không tự bịa lý do khi không có sự cố nào ghi nhận tương ứng.
+function lyDoAnhHuong(entry){
+  if (!entry || !entry.top3 || entry.top3.length === 0) {
+    return '<i>không có sự cố dừng máy ghi nhận tương ứng trong tuần — cần bổ sung giải trình thủ công (thiếu NVL/nhân lực/đổi kế hoạch…)</i>';
+  }
+  const letters = ['a','b','c'];
+  return entry.top3.map((t,i) => letters[i] + ') ' + escapeHtml(t.label) + ' (' + fmtNum(t.phut) + "')").join(' &nbsp;&nbsp; ');
+}
+function pcard(title, sub, phut, count, top3){
+  return '<div class="pcard"><div class="pcard-head"><span class="pcard-title">' + escapeHtml(title) + '</span>' +
+    '<span class="pcard-total">' + fmtNum(phut) + "' · " + count + ' lượt</span></div>' +
+    (sub ? '<div class="pcard-sub">' + escapeHtml(sub) + '</div>' : '') +
+    '<ol>' + top3.map((t,i) => '<li><span class="rank2">' + (i+1) + '</span><span class="problem-txt">' + escapeHtml(t.label) + '</span>' +
+      '<span class="problem-meta">' + fmtNum(t.phut) + "'" + (t.count>1?(' · '+t.count+' lượt'):'') + '</span></li>').join('') + '</ol></div>';
+}
+function caRow(label, w1, v1, w2, v2){
+  return '<div class="ca-row"><div class="ca-metric">' + escapeHtml(label) + '</div><div>' +
+    '<div class="ca-bar-line"><span class="ca-tag c1">Ca 1/Ngày</span><div class="ca-track"><div class="ca-fill c1" style="width:' + Math.max(2,w1) + '%"></div></div><span class="ca-val num">' + v1 + '</span></div>' +
+    '<div class="ca-bar-line"><span class="ca-tag c2">Ca 2/Đêm</span><div class="ca-track"><div class="ca-fill c2" style="width:' + Math.max(2,w2) + '%"></div></div><span class="ca-val num">' + v2 + '</span></div>' +
+    '</div></div>';
+}
+
+// ── Bảng vấn đề & hành động đối ứng ─────────────────────────────────────
+const COUNTERMEASURE_HINT = {
+  'B1': ['Rà soát nhiệt độ khuôn / vệ sinh khuôn định kỳ, kiểm tra quy trình đúc', 'Tổ trưởng Đúc / QC'],
+  'C3': ['Chuẩn hoá quy trình chuẩn bị khuôn trước khi đổi ca, kiểm tra sẵn khuôn kế tiếp', 'Tổ trưởng Đúc / Kỹ thuật khuôn'],
+  'A2': ['Kiểm tra bảo trì khuôn định kỳ, xử lý dứt điểm lỗi cơ khí khuôn', 'Bảo trì khuôn'],
+  'A1': ['Bảo trì phòng ngừa máy đúc theo lịch, kiểm tra thiết bị trước ca', 'Bảo trì máy'],
+  'C2': ['Rà soát kế hoạch tiếp liệu, phối hợp kho NVL để tránh gián đoạn', 'Kho NVL / Điều độ'],
+  'C1': ['Xem xét ổn định kế hoạch sản xuất, hạn chế thay đổi đột xuất giữa ca', 'Kế hoạch sản xuất'],
+  'D1': ['Rà soát định biên nhân sự theo ca, có phương án dự phòng nghỉ đột xuất', 'Quản lý nhân sự / Tổ trưởng ca'],
+  'E2': ['Sắp xếp vệ sinh vào thời điểm ít ảnh hưởng kế hoạch, rút ngắn thời gian vệ sinh', 'Tổ trưởng ca'],
+  'F1': ['Phối hợp IPQC xử lý dứt điểm hạng mục không đạt, xem lại checklist tuần kiểm', 'QC / IPQC'],
+};
+function suggestActionRows(suco){
+  const byIssue = groupBy(suco, r=>issueCode(r.loai_su_co));
+  const total = sumBy(suco, r=>r.thoi_gian_dung_phut) || 1;
+  const items = [...byIssue.entries()].map(([code, rs]) => {
+    const label = issueLabel(code, rs);
+    const phut = sumBy(rs, r=>r.thoi_gian_dung_phut);
+    const top1 = top3VanDe(rs)[0];
+    const hint = COUNTERMEASURE_HINT[code] || ['Xác định nguyên nhân gốc, đề xuất đối sách phù hợp', 'Tổ trưởng ca'];
+    const deadline = addDays(currentMonday, 7);
+    return {
+      id: null, tuan_bat_dau: fmtISO(currentMonday), stt: 0, van_de: label,
+      so_phut_dung: phut, ty_le_phan_tram: Math.round(phut/total*1000)/10,
+      nguyen_nhan: top1 ? (top1.label + ' (' + fmtNum(top1.phut) + "', " + top1.count + ' lượt)') : '',
+      doi_sach: hint[0], dam_nhiem: hint[1], thoi_han: fmtISO(deadline),
+    };
+  }).sort((a,b) => b.so_phut_dung - a.so_phut_dung);
+  items.forEach((r,i) => r.stt = i+1);
+  return items;
+}
+function blankActionRow(){
+  return { id: null, tuan_bat_dau: fmtISO(currentMonday), stt: actionRows.length+1, van_de: '', so_phut_dung: 0,
+    ty_le_phan_tram: 0, nguyen_nhan: '', doi_sach: '', dam_nhiem: '', thoi_han: '' };
+}
+function renderActionTable(){
+  const badge = document.getElementById('actionBadge');
+  badge.innerHTML = actionRowsSaved
+    ? '<span class="saved-badge">✓ Đã lưu — dữ liệu này là bản đã chỉnh sửa/lưu cho tuần này</span>'
+    : '<span class="draft-badge">✎ Gợi ý tự động — chưa lưu, hãy chỉnh sửa rồi bấm Lưu</span>';
+  const tbody = document.getElementById('actionTblBody');
+  tbody.innerHTML = actionRows.map((r,i) => actionRowHtml(r,i)).join('') ||
+    '<tr><td colspan="9" class="rowsub" style="font-style:italic;text-align:center;padding:14px">Chưa có dòng nào — bấm "+ Thêm dòng" để bắt đầu.</td></tr>';
+  actionRows.forEach((r,i) => bindActionRow(i));
+}
+function actionRowHtml(r,i){
+  return '<tr data-i="' + i + '">' +
+    '<td class="stt-cell">' + (i+1) + '</td>' +
+    '<td><div class="tacell"><textarea rows="1" spellcheck="false" data-f="van_de">' + escapeHtml(r.van_de||'') + '</textarea></div></td>' +
+    '<td><input type="number" spellcheck="false" data-f="so_phut_dung" value="' + (r.so_phut_dung||0) + '"></td>' +
+    '<td><input type="number" step="0.1" spellcheck="false" data-f="ty_le_phan_tram" value="' + (r.ty_le_phan_tram||0) + '"></td>' +
+    '<td><div class="tacell"><textarea rows="1" spellcheck="false" data-f="nguyen_nhan">' + escapeHtml(r.nguyen_nhan||'') + '</textarea></div></td>' +
+    '<td><div class="tacell"><textarea rows="1" spellcheck="false" data-f="doi_sach">' + escapeHtml(r.doi_sach||'') + '</textarea></div></td>' +
+    '<td><div class="tacell"><textarea rows="1" spellcheck="false" data-f="dam_nhiem">' + escapeHtml(r.dam_nhiem||'') + '</textarea></div></td>' +
+    '<td><input type="date" spellcheck="false" data-f="thoi_han" value="' + escapeHtml(r.thoi_han||'') + '"></td>' +
+    '<td class="del-cell"><button type="button" class="del-btn" data-del="' + i + '" title="Xoá dòng">✕</button></td>' +
+    '</tr>';
+}
+function syncRowHeight(tr){
+  // các ô textarea trong cùng 1 dòng phải cao bằng nhau (dòng cao nhất) để giữ đúng lưới bảng
+  const areas = tr.querySelectorAll('textarea');
+  if (!areas.length) return;
+  let max = 30;
+  areas.forEach(a => { a.style.height = 'auto'; max = Math.max(max, a.scrollHeight); });
+  areas.forEach(a => {
+    a.style.height = a.scrollHeight + 'px';
+    const wrap = a.closest('.tacell');
+    if (wrap) wrap.style.height = max + 'px';
+  });
+}
+function bindActionRow(i){
+  const tr = document.querySelector('#actionTblBody tr[data-i="' + i + '"]');
+  if (!tr) return;
+  tr.querySelectorAll('[data-f]').forEach(el => {
+    el.addEventListener('input', () => {
+      actionRows[i][el.dataset.f] = el.type === 'number' ? Number(el.value) : el.value;
+      if (el.tagName === 'TEXTAREA') syncRowHeight(tr);
+    });
+  });
+  syncRowHeight(tr);
+  const delBtn = tr.querySelector('[data-del]');
+  if (delBtn) delBtn.addEventListener('click', () => { actionRows.splice(i,1); actionRows.forEach((r,j)=>r.stt=j+1); renderActionTable(); });
+}
+async function saveActionRows(){
+  const session = await MesAuth.getSession();
+  if (!session) {
+    const returnTo = encodeURIComponent(window.location.href);
+    window.location.href = 'shared/login.html?returnTo=' + returnTo;
+    return;
+  }
+  const btn = document.getElementById('btnSaveAction');
+  btn.disabled = true;
+  showActionMsg('info', '⏳ Đang lưu…');
+  const identity = await MesAuth.getCurrentUserIdentity();
+  const tuan = fmtISO(currentMonday);
+  const payload = actionRows.map((r,i) => ({
+    tuan_bat_dau: tuan, stt: i+1, van_de: r.van_de||'', so_phut_dung: r.so_phut_dung||0,
+    ty_le_phan_tram: r.ty_le_phan_tram||0, nguyen_nhan: r.nguyen_nhan||'', doi_sach: r.doi_sach||'',
+    dam_nhiem: r.dam_nhiem||'', thoi_han: r.thoi_han || null, updated_by: identity, updated_at: new Date().toISOString(),
+  }));
+  const delRes = await sb.from('duc_bao_cao_tuan_van_de').delete().eq('tuan_bat_dau', tuan);
+  if (delRes.error) { btn.disabled = false; return showActionMsg('error', 'Lỗi khi lưu: ' + delRes.error.message); }
+  if (payload.length){
+    const insRes = await sb.from('duc_bao_cao_tuan_van_de').insert(payload);
+    if (insRes.error) { btn.disabled = false; return showActionMsg('error', 'Lỗi khi lưu: ' + insRes.error.message); }
+  }
+  actionRowsSaved = true;
+  btn.disabled = false;
+  showActionMsg('ok', '✓ Đã lưu ' + payload.length + ' dòng.');
+  renderActionTable();
+}
+function showActionMsg(cls, text){
+  const el = document.getElementById('actionMsg');
+  el.className = 'msg ' + cls; el.style.display = 'block'; el.textContent = text;
+}
+
+// ── Trang / điều hướng tuần-tháng ────────────────────────────────────────
+function showMsg(cls, text){ const el = document.getElementById('pageMsg'); el.className='msg '+cls; el.style.display='block'; el.textContent = text; }
+function hideMsg(){ const el = document.getElementById('pageMsg'); el.style.display='none'; }
+
+function updateModeUI(mode){
+  document.getElementById('fMode').value = mode;
+  document.getElementById('fMonday').style.display = mode === 'week' ? '' : 'none';
+  document.getElementById('fMonth').style.display = mode === 'month' ? '' : 'none';
+  document.getElementById('fPeriodLabel').textContent = mode === 'week' ? 'Tuần' : 'Tháng';
+  document.getElementById('btnPrevPeriod').textContent = mode === 'week' ? '◀ Tuần trước' : '◀ Tháng trước';
+  document.getElementById('btnNextPeriod').textContent = mode === 'week' ? 'Tuần sau ▶' : 'Tháng sau ▶';
+  document.getElementById('btnThisPeriod').textContent = mode === 'week' ? 'Tuần này' : 'Tháng này';
+}
+
+function goToPeriod(mode, refDate){
+  updateModeUI(mode);
+  loadPeriod(mode, refDate).catch(err => showMsg('error', 'Lỗi: ' + err.message));
+  const url = new URL(window.location.href);
+  url.searchParams.set('mode', mode);
+  if (mode === 'week') {
+    url.searchParams.set('monday', fmtISO(mondayOf(refDate)));
+    url.searchParams.delete('month');
+  } else {
+    url.searchParams.set('month', fmtMonthInput(monthStartOf(refDate)));
+    url.searchParams.delete('monday');
+  }
+  history.replaceState(null, '', url);
+}
+
+document.getElementById('fMode').addEventListener('change', (e) => {
+  goToPeriod(e.target.value, currentRefDate || new Date());
+});
+document.getElementById('fMonday').addEventListener('change', (e) => {
+  const d = new Date(e.target.value + 'T00:00:00');
+  goToPeriod('week', d);
+});
+document.getElementById('fMonth').addEventListener('change', (e) => {
+  const [y,m] = e.target.value.split('-').map(Number);
+  goToPeriod('month', new Date(y, m-1, 1));
+});
+document.getElementById('btnPrevPeriod').addEventListener('click', () => {
+  goToPeriod(currentMode, currentMode === 'week' ? addDays(currentMonday, -7) : addMonths(currentRefDate, -1));
+});
+document.getElementById('btnNextPeriod').addEventListener('click', () => {
+  goToPeriod(currentMode, currentMode === 'week' ? addDays(currentMonday, 7) : addMonths(currentRefDate, 1));
+});
+document.getElementById('btnThisPeriod').addEventListener('click', () => goToPeriod(currentMode, new Date()));
+
+function startHeaderClock(){
+  function tick(){
+    const d = new Date();
+    document.getElementById('hdrClockDate').textContent = d.toLocaleDateString('vi-VN');
+    document.getElementById('hdrClockTime').textContent = d.toLocaleTimeString('vi-VN', { hour12: false });
+  }
+  tick();
+  setInterval(tick, 1000);
+}
+startHeaderClock();
+
+(function init(){
+  const params = new URLSearchParams(window.location.search);
+  const mode = params.get('mode') === 'month' ? 'month' : 'week';
+  let start = new Date();
+  if (mode === 'week') {
+    const mondayParam = params.get('monday');
+    if (mondayParam && /^\d{4}-\d{2}-\d{2}$/.test(mondayParam)) {
+      const d = new Date(mondayParam + 'T00:00:00');
+      if (!isNaN(d)) start = d;
+    }
+  } else {
+    const monthParam = params.get('month');
+    if (monthParam && /^\d{4}-\d{2}$/.test(monthParam)) {
+      const [y,m] = monthParam.split('-').map(Number);
+      start = new Date(y, m-1, 1);
+    }
+  }
+  goToPeriod(mode, start);
+})();
+</script>
+</body>
+</html>
