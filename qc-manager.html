@@ -211,6 +211,49 @@ tr:last-child td{border-bottom:none}
     </div>
 
     <div class="panel">
+      <div class="panel-head">📊 Hiệu suất IPQC – Toàn bộ dữ liệu</div>
+      <div class="panel-body">
+        <div class="filter-grid" style="padding:0 0 8px;">
+          <div class="filter-field">
+            <label>IPQC</label>
+            <select id="ipqc-all-ipqc" onchange="renderIpqcPerformanceTable()">
+              <option value="">Tất cả</option>
+            </select>
+          </div>
+          <div class="filter-field">
+            <label>Tháng</label>
+            <select id="ipqc-all-thang" onchange="renderIpqcPerformanceTable()">
+              <option value="">Tất cả</option>
+            </select>
+          </div>
+          <div class="filter-field">
+            <label>Từ ngày</label>
+            <input id="ipqc-all-from" type="date" onchange="renderIpqcPerformanceTable()">
+          </div>
+          <div class="filter-field">
+            <label>Đến ngày</label>
+            <input id="ipqc-all-to" type="date" onchange="renderIpqcPerformanceTable()">
+          </div>
+          <div class="filter-field">
+            <label>Sắp xếp</label>
+            <select id="ipqc-all-sort" onchange="renderIpqcPerformanceTable()">
+              <option value="dung_han_rate-desc">Đúng hạn ↓</option>
+              <option value="ng_rate-asc">NG ↑</option>
+              <option value="total-desc">Tổng kiểm ↓</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Hạng</th><th>IPQC</th><th>Tổng</th><th>Đúng hạn</th><th>Trễ</th><th>Tỷ lệ đúng hạn</th><th>OK</th><th>NG</th><th>Cảnh báo</th><th>Tỷ lệ NG</th><th>Tổng thời gian</th><th>TB/lần</th><th>Đánh giá</th></tr></thead>
+            <tbody id="ipqc-all-tbody"></tbody>
+          </table>
+          <div class="empty-note hidden" id="ipqc-all-empty">Chưa có dữ liệu hiệu suất toàn bộ lịch sử.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
       <div class="panel-head">� Data phân tích thống kê <span class="count" id="stat-count">0</span></div>
       <div class="panel-body">
         <div class="data-stat-grid" id="data-stat-grid"></div>
@@ -476,7 +519,7 @@ tr:last-child td{border-bottom:none}
 <script src="shared/supabase-client.js"></script>
 <script src="shared/navbar.js"></script>
 <script>
-const state = { machines: [], products: [], productMap: {}, moldsByProduct: {}, dynamicFiltersLoaded: false, suCoPhutDungMap: {}, suCoLog: [], ncpList: [], ncpAvailableNg: [], ncpLoaded: false, ncpCurrentCase: null, pdfBase64: null, pdfFileName: null, pdfBlob: null, currentUserEmail: '' };
+const state = { machines: [], products: [], productMap: {}, moldsByProduct: {}, dynamicFiltersLoaded: false, suCoPhutDungMap: {}, suCoLog: [], allIpqcHistory: [], ncpList: [], ncpAvailableNg: [], ncpLoaded: false, ncpCurrentCase: null, pdfBase64: null, pdfFileName: null, pdfBlob: null, currentUserEmail: '' };
 
 function switchTab(tab){
   document.getElementById('tab-monitor').classList.toggle('active', tab === 'monitor');
@@ -624,6 +667,7 @@ async function loadBoard(){
     const now = Date.now();
     const PRIORITY = { sau_su_co: 0, doi_khuon: 0, dinh_ky: 1 };
     const pending = [], done = [], byNguoiKiem = {};
+    const machineNgStreaks = buildMachineNgStreakMap(state.allIpqcHistory || []);
 
     (dinhKyRes.data || []).forEach(r => {
       if (!activeSet.has(r.id_dong)) return;
@@ -636,7 +680,7 @@ async function loadBoard(){
         const mocCho = r.han_kiem ? new Date(r.han_kiem) : null;
         const phutTao = mocCho ? Math.round((now - mocCho.getTime()) / 60000) : 0;
         const dueInfo = ipqcDueInfo(r.loai_kiem, phutTao);
-        pending.push(Object.assign({ id_checkpoint: r.id_checkpoint, ma_may: r.ma_may, ma_sp: r.ma_sp, loai_kiem: r.loai_kiem, phut_da_troi: phutTao }, dueInfo));
+        pending.push(Object.assign({ id_checkpoint: r.id_checkpoint, ma_may: r.ma_may, ma_sp: r.ma_sp, loai_kiem: r.loai_kiem, phut_da_troi: phutTao, ng_lien_tuc: machineNgStreaks[r.ma_may] || 0 }, dueInfo));
       } else if (r.trang_thai === 'da_kiem') {
         const mapped = mapIpqcDoneRow(r);
         done.push(mapped);
@@ -654,6 +698,8 @@ async function loadBoard(){
     pending.sort((a, b) => {
       const pa = PRIORITY[a.loai_kiem] != null ? PRIORITY[a.loai_kiem] : 2, pb = PRIORITY[b.loai_kiem] != null ? PRIORITY[b.loai_kiem] : 2;
       if (pa !== pb) return pa - pb;
+      if ((a.ng_lien_tuc >= 2) !== (b.ng_lien_tuc >= 2)) return (a.ng_lien_tuc >= 2) ? -1 : 1;
+      if ((a.phut_da_troi >= 120) !== (b.phut_da_troi >= 120)) return (a.phut_da_troi >= 120) ? -1 : 1;
       if (a.da_den_han !== b.da_den_han) return a.da_den_han ? -1 : 1;
       return b.phut_da_troi - a.phut_da_troi;
     });
@@ -667,8 +713,8 @@ async function loadBoard(){
 }
 
 function levelForMinutes(m){
-  if (m >= 90) return 'row-alarm';
-  if (m >= 30) return 'row-warn';
+  if (m >= 180) return 'row-alarm';
+  if (m >= 120) return 'row-warn';
   return '';
 }
 
@@ -803,13 +849,23 @@ function doneRowHtml(d){
 
 function renderBoard(b){
   document.getElementById('pending-count').textContent = b.pending.length;
-  document.getElementById('pending-tbody').innerHTML = b.pending.map(p => `
-    <tr class="${p.da_den_han ? levelForMinutes(p.phut_da_troi) : ''}">
-      <td><b>${escapeHtml(p.ma_may)}</b></td>
-      <td class="mono">${escapeHtml(p.ma_sp)}</td>
-      <td>${escapeHtml(LOAI_LABEL[p.loai_kiem] || p.loai_kiem)}</td>
-      <td class="mono">${p.da_den_han ? ('Đang chờ ' + p.phut_da_troi + 'p') : ('<span class="pill neutral">Sắp tới · đã ' + p.phut_da_troi + 'p</span>')}</td>
-    </tr>`).join('');
+  document.getElementById('pending-tbody').innerHTML = b.pending.map(p => {
+    const hasNgStreak = p.ng_lien_tuc >= 2;
+    const isOver120 = p.phut_da_troi >= 120;
+    const rowStatusText = p.da_den_han
+      ? (isOver120 ? ('⚠ QUÁ 120 PHÚT – CẦN KIỂM TRA NGAY (' + p.phut_da_troi + 'p)') : ('Đang chờ ' + p.phut_da_troi + 'p'))
+      : ('<span class="pill neutral">Sắp tới · đã ' + p.phut_da_troi + 'p</span>');
+    const ngStreakBadge = hasNgStreak
+      ? '<div><span class="pill warn">⚠ NG LIÊN TỤC: ' + p.ng_lien_tuc + ' LẦN</span></div>'
+      : '';
+    return `
+      <tr class="${p.da_den_han ? levelForMinutes(p.phut_da_troi) : ''}">
+        <td><b>${escapeHtml(p.ma_may)}</b></td>
+        <td class="mono">${escapeHtml(p.ma_sp)}</td>
+        <td>${escapeHtml(LOAI_LABEL[p.loai_kiem] || p.loai_kiem)}</td>
+        <td class="mono">${rowStatusText}${ngStreakBadge}</td>
+      </tr>`;
+  }).join('');
   document.getElementById('pending-empty').classList.toggle('hidden', b.pending.length > 0);
 
   document.getElementById('nguoi-tbody').innerHTML = b.byNguoiKiem.map(n => `
@@ -843,10 +899,11 @@ function fillSelect(id, values){
 }
 
 async function loadQcFilters(){
-  const [mProd, mMachines, mMolds] = await Promise.all([
+  const [mProd, mMachines, mMolds, historyRes] = await Promise.all([
     sb.from('master_products').select('ma_sp,ten_sp'),
     sb.from('master_machines').select('ma_may').or('bo_phan.eq.Đúc,bo_phan.is.null'),
     sb.from('duc_shot_khuon').select('ma_khuon,ten_sp_gan_nhat'),
+    sb.from('duc_ipqc_checkpoint').select('*').eq('trang_thai', 'da_kiem'),
   ]);
   state.machines = (mMachines.data || []).map(r => r.ma_may).filter(Boolean);
   state.products = (mProd.data || []).map(r => r.ma_sp).filter(Boolean);
@@ -857,6 +914,7 @@ async function loadQcFilters(){
     state.customerMap[p.ma_sp] = [p.ma_khach_hang, p.ten_khach_hang].filter(Boolean).join(' — ') || '';
   });
   state.currentUserEmail = (await MesAuth.getCurrentUserIdentity()) || '';
+  state.allIpqcHistory = (historyRes.data || []).map(mapIpqcDoneRow);
 
   state.moldsByProduct = {};
   (mMolds.data || []).forEach(m => {
@@ -870,7 +928,9 @@ async function loadQcFilters(){
   fillSelect('fl-ma-may', state.machines);
   fillSelect('fl-ma-sp', state.products);
   fillSelect('tc-ma-sp', state.products);
+  populateIpqcPerformanceFilters();
   searchHistory();
+  renderIpqcPerformanceTable();
 }
 
 function populateSoKhuonField(prefix, maSp, currentValue){
@@ -968,6 +1028,133 @@ function renderHistory(list){
   document.getElementById('history-tbody').innerHTML = list.map(doneRowHtml).join('');
   document.getElementById('history-empty').classList.toggle('hidden', list.length > 0);
   renderTrendStats(list);
+}
+
+function buildMachineNgStreakMap(history){
+  const streaks = {};
+  const byMachine = {};
+  const ordered = (history || []).slice().sort((a, b) => {
+    const ta = a.thoi_diem_kiem_thuc_te ? new Date(a.thoi_diem_kiem_thuc_te).getTime() : 0;
+    const tb = b.thoi_diem_kiem_thuc_te ? new Date(b.thoi_diem_kiem_thuc_te).getTime() : 0;
+    return ta - tb;
+  });
+
+  ordered.forEach(row => {
+    const key = String(row.ma_may || '').trim();
+    if (!key) return;
+    if (row.ket_qua === 'NG') {
+      byMachine[key] = (byMachine[key] || 0) + 1;
+    } else {
+      byMachine[key] = 0;
+    }
+    streaks[key] = Math.max(0, byMachine[key]);
+  });
+  return streaks;
+}
+
+function getIpqcPerformanceRows(){
+  const ipqcFilter = document.getElementById('ipqc-all-ipqc')?.value || '';
+  const monthFilter = document.getElementById('ipqc-all-thang')?.value || '';
+  const fromFilter = document.getElementById('ipqc-all-from')?.value || '';
+  const toFilter = document.getElementById('ipqc-all-to')?.value || '';
+
+  let rows = (state.allIpqcHistory || []).filter(r => {
+    const ipqcValue = String(r.nguoi_kiem || '').trim();
+    if (ipqcFilter && ipqcValue !== ipqcFilter) return false;
+    if (monthFilter && (!r.thoi_diem_kiem_thuc_te || r.thoi_diem_kiem_thuc_te.slice(0, 7) !== monthFilter)) return false;
+    if (fromFilter && (!r.thoi_diem_kiem_thuc_te || r.thoi_diem_kiem_thuc_te < fromFilter + 'T00:00:00')) return false;
+    if (toFilter && (!r.thoi_diem_kiem_thuc_te || r.thoi_diem_kiem_thuc_te > toFilter + 'T23:59:59')) return false;
+    return true;
+  });
+
+  const byIpqc = {};
+  rows.forEach(r => {
+    const key = String(r.nguoi_kiem || '').trim() || '(không rõ)';
+    if (!byIpqc[key]) {
+      byIpqc[key] = {
+        ipqc: key,
+        total: 0,
+        dung_han: 0,
+        tre: 0,
+        ok: 0,
+        ng: 0,
+        canh_bao: 0,
+        total_thoi_gian: 0,
+      };
+    }
+    const item = byIpqc[key];
+    item.total += 1;
+    if (r.dung_han) item.dung_han += 1; else item.tre += 1;
+    if (r.ket_qua === 'OK') item.ok += 1;
+    if (r.ket_qua === 'NG') item.ng += 1;
+    if (r.ket_qua === 'CANH_BAO') item.canh_bao += 1;
+    item.total_thoi_gian += Number(r.thoi_gian_kiem_giay) || 0;
+  });
+
+  return Object.values(byIpqc).map(item => {
+    const dungHanRate = item.total ? (item.dung_han / item.total) * 100 : 0;
+    const ngRate = item.total ? (item.ng / item.total) * 100 : 0;
+    const evaluation = dungHanRate >= 95 ? 'Tốt' : (dungHanRate >= 90 ? 'Khá' : 'Cần cải thiện');
+    return {
+      ...item,
+      dung_han_rate: dungHanRate,
+      ng_rate: ngRate,
+      avg_per_check: item.total ? item.total_thoi_gian / item.total : 0,
+      evaluation,
+    };
+  });
+}
+
+function populateIpqcPerformanceFilters(){
+  const ipqcSelect = document.getElementById('ipqc-all-ipqc');
+  const monthSelect = document.getElementById('ipqc-all-thang');
+  const ipqcNames = Array.from(new Set((state.allIpqcHistory || []).map(r => String(r.nguoi_kiem || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'vi'));
+  const months = Array.from(new Set((state.allIpqcHistory || []).map(r => r.thoi_diem_kiem_thuc_te ? r.thoi_diem_kiem_thuc_te.slice(0, 7) : null).filter(Boolean))).sort().reverse();
+
+  ipqcSelect.innerHTML = '<option value="">Tất cả</option>' + ipqcNames.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
+  monthSelect.innerHTML = '<option value="">Tất cả</option>' + months.map(m => `<option value="${m}">${new Date(m + '-01T00:00:00').toLocaleDateString('vi-VN', { month: 'numeric', year: 'numeric' })}</option>`).join('');
+}
+
+function renderIpqcPerformanceTable(){
+  const rows = getIpqcPerformanceRows();
+  const sortValue = document.getElementById('ipqc-all-sort')?.value || 'dung_han_rate-desc';
+  const [field, direction] = sortValue.split('-');
+
+  rows.sort((a, b) => {
+    const avg = direction === 'desc' ? -1 : 1;
+    const primary = (field === 'dung_han_rate') ? (a.dung_han_rate - b.dung_han_rate) :
+      (field === 'ng_rate') ? (a.ng_rate - b.ng_rate) :
+      (field === 'total') ? (a.total - b.total) : 0;
+    if (primary !== 0) return primary * avg;
+    return b.total - a.total;
+  });
+
+  const tbody = document.getElementById('ipqc-all-tbody');
+  const empty = document.getElementById('ipqc-all-empty');
+  if (!rows.length) {
+    tbody.innerHTML = '';
+    empty.classList.remove('hidden');
+    return;
+  }
+  empty.classList.add('hidden');
+
+  tbody.innerHTML = rows.map((row, index) => `
+    <tr>
+      <td class="mono">${index + 1}</td>
+      <td><b>${escapeHtml(row.ipqc)}</b></td>
+      <td class="mono">${row.total}</td>
+      <td class="mono" style="color:var(--run-fg)">${row.dung_han}</td>
+      <td class="mono" style="color:${row.tre > 0 ? 'var(--alarm-fg)' : 'var(--text-muted)'}">${row.tre}</td>
+      <td class="mono">${row.dung_han_rate.toFixed(1)}%</td>
+      <td class="mono" style="color:var(--run-fg)">${row.ok}</td>
+      <td class="mono" style="color:${row.ng > 0 ? 'var(--alarm-fg)' : 'var(--text-muted)'}">${row.ng}</td>
+      <td class="mono" style="color:${row.canh_bao > 0 ? 'var(--warn-fg)' : 'var(--text-muted)'}">${row.canh_bao}</td>
+      <td class="mono">${row.ng_rate.toFixed(1)}%</td>
+      <td class="mono">${fmtDurationSec(row.total_thoi_gian)}</td>
+      <td class="mono">${fmtDurationSec(row.avg_per_check)}</td>
+      <td><span class="pill ${row.evaluation === 'Tốt' ? 'ok' : (row.evaluation === 'Khá' ? 'warn' : 'ng')}">${row.evaluation}</span></td>
+    </tr>
+  `).join('');
 }
 
 // ===================== Xử lý sản phẩm không phù hợp =====================

@@ -41,6 +41,8 @@
     ] },
     { label: 'Chất lượng', items: [
       { label: 'IPQC', href: 'ipqc.html' },
+      { label: 'IQC', href: 'iqc.html' },
+      { label: 'OQC', href: 'oqc.html' },
       { label: 'QC Manager / NCP', href: 'qc-manager.html' },
     ] },
     { label: 'Kho & Truy xuất', items: [
@@ -65,6 +67,7 @@
     'duc-dashboard.html': { icon: '🏭', title: 'Bảng điều khiển Đúc', desc: 'Kế hoạch, sản lượng, sự cố, khuôn theo ca', noTitleBar: true },
     'mobile.html': { icon: '📱', title: 'Nhập liệu di động — Đúc', desc: 'Bản rút gọn cho điện thoại, 1 máy/màn hình' },
     'ipqc.html': { icon: '🔎', title: 'IPQC — Kiểm tra tuần kiểm', desc: 'Hàng đợi điểm kiểm, nộp kết quả kèm ảnh' },
+    'iqc.html': { icon: '📋', title: 'IQC — Dashboard đầu vào', desc: 'Theo dõi LOT, NCC, lỗi, tỷ lệ NG theo thời gian' },
     'chuyencongdoan.html': { icon: '🔀', title: 'Chuyển công đoạn & Đóng gói', desc: 'Quét QR chuyển hàng, đóng gói lại, đổi mã SP', noTitleBar: true },
     'oqc.html': { icon: '📦', title: 'OQC — Đóng gói Pallet', desc: 'Quét tem, gom pallet, đóng gói', noTitleBar: true },
     'kho-thanh-pham.html': { icon: '🏬', title: 'Kho Thành Phẩm', desc: 'Nhập kho / Xuất hàng bằng QR', noTitleBar: true },
