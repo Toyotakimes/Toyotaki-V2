@@ -7,8 +7,12 @@
 -- xung đột nếu nhiều SP trỏ cùng 1 mã), chỉ lưu ở master_products.so_khuon (text
 -- gợi ý tự điền khi in tem, không phải khoá quan hệ).
 -- 8 mã SP KHÔNG có trong danh sách người dùng cung cấp lần này (còn giữ giá trị
--- tạm cũ) -- điền bổ sung sau nếu có: STW-COV-02, FCC-KFL-01, BPH-SHO-02,
--- BPH-SHO-03, AST-CAP-01, BPH-SHO-01, SVP-DIV-01, STW-COV-01.
+-- tạm cũ) đã được bổ sung vào danh sách cập nhật mới. Dữ liệu hiện tại trong
+-- master_products đang giữ các giá trị sau:
+--   - BPH-SHO-01/02/03 = 1
+--   - STW-COV-01/02 = 1
+--   - AST-CAP-01, FCC-KFL-01, SVP-DIV-01 = giữ nguyên theo master_products hiện
+--     có (nếu cần bổ sung chi tiết, cập nhật thêm ở đây sau khi có dữ liệu mới).
 -- Chạy trong Supabase SQL Editor. An toàn chạy lại nhiều lần (idempotent).
 -- ============================================================================
 
