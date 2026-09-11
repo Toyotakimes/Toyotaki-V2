@@ -605,7 +605,24 @@ async function loadMasterLists(){
     sb.from('master_products').select('ma_sp,ten_sp,so_khuon'),
   ]);
   machineList = (mMachines.data || []).map(r => r.ma_may).filter(Boolean).sort((a,b) => a.localeCompare(b, 'vi', { numeric: true }));
+
+  // Fallback tạm thời cho các mã SP vừa được bổ sung ở list người dùng nhưng
+  // chưa đồng bộ hết lên master_products live. Dữ liệu này chỉ giúp UI hiển thị
+  // đúng danh sách đã cập nhật; bảng gốc vẫn giữ nguyên và có thể được đồng bộ
+  // lại sau khi Supabase có dữ liệu đầy đủ.
+  const fallbackProducts = [
+    { ma_sp: 'STW-COV-01', ten_sp: '', so_khuon: '1' },
+    { ma_sp: 'STW-COV-02', ten_sp: '', so_khuon: '1' },
+    { ma_sp: 'SVP-DIV-01', ten_sp: '', so_khuon: null },
+  ];
+
   const products = (mProducts.data || []).filter(p => p.ma_sp).sort((a,b) => a.ma_sp.localeCompare(b.ma_sp, 'vi', { numeric: true }));
+  const seen = new Set(products.map(p => p.ma_sp));
+  fallbackProducts.forEach(p => {
+    if (!seen.has(p.ma_sp)) products.push(p);
+  });
+  products.sort((a,b) => a.ma_sp.localeCompare(b.ma_sp, 'vi', { numeric: true }));
+
   productMap = {};
   products.forEach(p => { productMap[p.ma_sp] = p.ten_sp || ''; });
   buildMoldsByProduct(products);
