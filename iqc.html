@@ -38,8 +38,484 @@
 
 <div class="modal hidden" id="detailModal"><div class="modal-box"><div class="modal-head"><span id="detailTitle">Chi tiết LOT</span><button class="button btn-secondary btn-small" onclick="closeDetail()">Đóng</button></div><div class="modal-body" id="detailBody"></div></div></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="shared/supabase-client.js"></script>
 <script>
-let dashboard={lots:[],defects:[]},editingId=null,completingId=null,completingLot=null,currentPage='iqc',statsRefreshTimer=null;const $=id=>document.getElementById(id),val=id=>$(id).value;function esc(x){return String(x??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
+(function () {
+  const safeRows = (rows) => Array.isArray(rows) ? rows : [];
+  const toLocalDateTime = (value) => {
+    if (!value) return '';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '';
+    const off = d.getTimezoneOffset();
+    const local = new Date(d.getTime() - off * 60000);
+    return local.toISOString().slice(0, 16);
+  };
+  const toIso = (value) => {
+    if (!value) return null;
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toISOString();
+  };
+  const toNumber = (value, fallback = 0) => {
+    const n = Number(value ?? fallback);
+    return Number.isFinite(n) ? n : fallback;
+  };
+  const formatDisplayDate = (value) => {
+    if (!value) return '—';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return value;
+    return d.toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' });
+  };
+
+  const normalizeLot = (row = {}) => ({
+    id: row.id,
+    receivedDate: toLocalDateTime(row.received_at),
+    pickupDate: toLocalDateTime(row.pickup_at),
+    completionDate: toLocalDateTime(row.completed_at),
+    supplier: row.supplier || '',
+    productCode: row.product_code || '',
+    productName: row.product_name || '',
+    lotNo: row.lot_no || '',
+    lotQty: toNumber(row.lot_qty),
+    inspectionType: row.inspection_type || 'Kiểm tra AQL',
+    aql: row.aql || '',
+    sampleQty: toNumber(row.sample_qty),
+    location: row.location || 'Kho',
+    status: row.status || 'Chưa lấy hàng',
+    result: row.result || '',
+    okQty: toNumber(row.ok_qty),
+    ngQty: toNumber(row.ng_qty),
+    okPercent: toNumber(row.ok_pct),
+    ngPercent: toNumber(row.ng_pct),
+    inspector: row.inspector || '',
+    note: row.note || '',
+    receivedInput: toLocalDateTime(row.received_at),
+    pickupInput: toLocalDateTime(row.pickup_at),
+    completionInput: toLocalDateTime(row.completed_at),
+    inspectionMinutes: toNumber(row.inspection_minutes),
+    startMs: row.pickup_at ? new Date(row.pickup_at).getTime() : null,
+    completedMs: row.completed_at ? new Date(row.completed_at).getTime() : null,
+  });
+
+  const normalizeDefect = (row = {}, lotMap = new Map()) => ({
+    id: row.id,
+    lotId: row.lot_id,
+    lotNo: lotMap.get(row.lot_id)?.lotNo || '',
+    defectType: row.defect_type || 'NG khác',
+    defectName: row.defect_name || '',
+    defectQty: toNumber(row.defect_qty),
+    defectPercent: toNumber(row.defect_percent),
+    note: row.note || '',
+    images: row.images || '',
+    time: formatDisplayDate(row.created_at),
+  });
+
+  const computeSampleQty = (lotQty, aql) => {
+    const q = Math.max(1, toNumber(lotQty, 0));
+    if (q <= 8) return 8;
+    if (q <= 15) return 13;
+    if (q <= 25) return 20;
+    if (q <= 50) return 32;
+    if (q <= 90) return 50;
+    if (q <= 150) return 80;
+    if (q <= 280) return 125;
+    if (q <= 500) return 200;
+    if (q <= 1200) return 315;
+    if (q <= 3200) return 500;
+    if (q <= 10000) return 800;
+    if (q <= 35000) return 1250;
+    if (q <= 150000) return 2000;
+    return 3150;
+  };
+
+  const normalizePayload = (data = {}) => {
+    const lotQty = toNumber(data.lotQty ?? data.lot_qty, 0);
+    const okQty = toNumber(data.okQty ?? data.ok_qty, 0);
+    const ngQty = toNumber(data.ngQty ?? data.ng_qty, 0);
+    const sampleQty = toNumber(data.sampleQty ?? data.sample_qty, computeSampleQty(lotQty, data.aql || ''));
+    const receivedAt = toIso(data.receivedDate ?? data.received_at);
+    const pickupAt = toIso(data.pickupDate ?? data.pickup_at);
+    const completedAt = toIso(data.completionDate ?? data.completed_at);
+
+    const inspectionMinutes = (() => {
+      if (pickupAt && completedAt) {
+        const diff = Math.max(0, (new Date(completedAt).getTime() - new Date(pickupAt).getTime()) / 60000);
+        return Math.round(diff);
+      }
+      return toNumber(data.inspectionMinutes ?? data.inspection_minutes, 0);
+    })();
+
+    return {
+      received_at: receivedAt,
+      pickup_at: pickupAt,
+      completed_at: completedAt,
+      supplier: String(data.supplier || '').trim(),
+      product_code: String(data.productCode || data.product_code || '').trim(),
+      product_name: String(data.productName || data.product_name || '').trim(),
+      lot_no: String(data.lotNo || data.lot_no || '').trim(),
+      lot_qty: lotQty,
+      inspection_type: String(data.inspectionType || data.inspection_type || 'Kiểm tra AQL').trim(),
+      aql: String(data.aql || '').trim(),
+      sample_qty: sampleQty,
+      location: String(data.location || 'Kho').trim(),
+      status: String(data.status || 'Chưa lấy hàng').trim(),
+      result: String(data.result || '').trim(),
+      ok_qty: okQty,
+      ng_qty: ngQty,
+      ok_pct: lotQty ? (okQty / lotQty) * 100 : 0,
+      ng_pct: lotQty ? (ngQty / lotQty) * 100 : 0,
+      inspector: String(data.inspector || '').trim(),
+      note: String(data.note || '').trim(),
+      inspection_minutes: inspectionMinutes,
+    };
+  };
+
+  const requireAuth = async () => {
+    const session = await MesAuth.getSession();
+    if (!session) {
+      const returnTo = encodeURIComponent(window.location.href);
+      window.location.href = 'shared/login.html?returnTo=' + returnTo;
+      throw new Error('Chưa đăng nhập');
+    }
+    return session;
+  };
+
+  const readLots = async () => {
+    try {
+      const { data, error } = await sb.from('iqc_lots').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      return safeRows(data).map(normalizeLot);
+    } catch (err) {
+      console.warn('iqc_lots not ready:', err.message || err);
+      return [];
+    }
+  };
+
+  const readDefects = async () => {
+    try {
+      const { data, error } = await sb.from('iqc_defects').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      return safeRows(data);
+    } catch (err) {
+      console.warn('iqc_defects not ready:', err.message || err);
+      return [];
+    }
+  };
+
+  const IqcApi = {
+    async getDashboardData() {
+      const lots = await readLots();
+      const defectsData = await readDefects();
+      const lotMap = new Map(lots.map((lot) => [lot.id, lot]));
+      const defects = defectsData.map((row) => normalizeDefect(row, lotMap));
+
+      return {
+        summary: {
+          total: lots.length,
+          waiting: lots.filter((lot) => ['Chưa lấy hàng', 'Đang chờ kiểm'].includes(lot.status)).length,
+          checking: lots.filter((lot) => lot.status === 'Đang kiểm tra').length,
+          done: lots.filter((lot) => lot.status === 'Đã kiểm tra').length,
+          ok: lots.filter((lot) => lot.result === 'OK').length,
+          ng: lots.filter((lot) => lot.result === 'NG').length,
+        },
+        lots,
+        defects,
+      };
+    },
+
+    async getAqlInfo(qty, aql) {
+      return { sample: computeSampleQty(qty, aql), code: 'L2' };
+    },
+
+    async getAppearanceDefects() {
+      try {
+        const { data, error } = await sb.from('iqc_appearance_defects').select('label').order('sort_order', { ascending: true });
+        if (error) throw error;
+        return safeRows(data).map((row) => row.label).filter(Boolean);
+      } catch (err) {
+        return ['Mặt xước', 'Màu lệch', 'Kích thước lệch', 'Rãnh/co ngót', 'Rỉ sét', 'Vết bẩn', 'Khác'];
+      }
+    },
+
+    async getLot(id) {
+      try {
+        const { data, error } = await sb.from('iqc_lots').select('*').eq('id', id).single();
+        if (error) throw error;
+        return normalizeLot(data);
+      } catch (err) {
+        throw new Error('Không tìm thấy LOT hoặc bảng IQC chưa được tạo: ' + (err.message || err));
+      }
+    },
+
+    async addLot(data) {
+      await requireAuth();
+      const row = normalizePayload(data);
+      const { data: inserted, error } = await sb.from('iqc_lots').insert([row]).select('*').single();
+      if (error) throw error;
+      return inserted;
+    },
+
+    async updateLot(id, data) {
+      await requireAuth();
+      const row = normalizePayload(data);
+      const { data: updated, error } = await sb.from('iqc_lots').update(row).eq('id', id).select('*').single();
+      if (error) throw error;
+      return updated;
+    },
+
+    async deleteLot(id) {
+      await requireAuth();
+      const { error } = await sb.from('iqc_lots').delete().eq('id', id);
+      if (error) throw error;
+      return { ok: true };
+    },
+
+    async completeLot(id, payload) {
+      await requireAuth();
+      const row = normalizePayload(payload);
+      const { data, error } = await sb.from('iqc_lots').update({
+        completed_at: row.completed_at,
+        result: row.result || 'OK',
+        ok_qty: row.ok_qty,
+        ng_qty: row.ng_qty,
+        ok_pct: row.ok_pct,
+        ng_pct: row.ng_pct,
+        inspector: row.inspector,
+        note: row.note,
+        status: 'Đã kiểm tra',
+        inspection_minutes: row.inspection_minutes,
+      }).eq('id', id).select('*').single();
+      if (error) throw error;
+      return { minutes: toNumber(data.inspection_minutes, 0), result: data.result || 'OK' };
+    },
+
+    async deleteDefect(id) {
+      await requireAuth();
+      const { error } = await sb.from('iqc_defects').delete().eq('id', id);
+      if (error) throw error;
+      return { ok: true };
+    },
+
+    async replaceLotDefects(lotId, itemsJson) {
+      await requireAuth();
+      const items = JSON.parse(itemsJson || '[]');
+      const { error: delErr } = await sb.from('iqc_defects').delete().eq('lot_id', lotId);
+      if (delErr) throw delErr;
+      const rows = items.map((item) => ({
+        lot_id: lotId,
+        defect_type: item.defectType || 'NG khác',
+        defect_name: item.defectName || '',
+        defect_qty: toNumber(item.defectQty, 0),
+        note: item.note || '',
+        images: item.images || '',
+      }));
+      if (rows.length) {
+        const { error: insErr } = await sb.from('iqc_defects').insert(rows);
+        if (insErr) throw insErr;
+      }
+      return {
+        expectedCount: rows.length,
+        actualCount: rows.length,
+        totalQty: rows.reduce((sum, row) => sum + toNumber(row.defect_qty, 0), 0),
+      };
+    },
+
+    async uploadImage(dataUrl, name, type) {
+      return { url: dataUrl, name, type };
+    },
+
+    async searchLotHistory(key) {
+      const term = String(key || '').trim();
+      try {
+        let query = sb.from('iqc_lots').select('*');
+        if (term) {
+          query = query.or(`product_code.ilike.%${term}%,product_name.ilike.%${term}%,lot_no.ilike.%${term}%`);
+        }
+        const { data, error } = await query.order('created_at', { ascending: false });
+        if (error) throw error;
+        return safeRows(data).map(normalizeLot);
+      } catch (err) {
+        console.warn('searchLotHistory fallback:', err.message || err);
+        return [];
+      }
+    },
+
+    async getLotDetails(id) {
+      try {
+        const [lotRes, defectsRes] = await Promise.all([
+          sb.from('iqc_lots').select('*').eq('id', id).single(),
+          sb.from('iqc_defects').select('*').eq('lot_id', id).order('created_at', { ascending: true }),
+        ]);
+        if (lotRes.error) throw lotRes.error;
+        if (defectsRes.error) throw defectsRes.error;
+
+        const lot = normalizeLot(lotRes.data || {});
+        const defects = safeRows(defectsRes.data).map((row) => normalizeDefect(row, new Map([[id, lot]])));
+        const defectSummary = [];
+        const summaryMap = new Map();
+        defects.forEach((row) => {
+          const key = row.defectName || row.defectType;
+          const current = summaryMap.get(key) || { name: key, qty: 0 };
+          current.qty += row.defectQty;
+          summaryMap.set(key, current);
+        });
+        summaryMap.forEach((value) => {
+          const percent = lot.sampleQty > 0 ? (value.qty / lot.sampleQty) * 100 : 0;
+          defectSummary.push({ name: value.name, qty: value.qty, percent });
+        });
+
+        const totalDefectQty = defects.reduce((sum, row) => sum + row.defectQty, 0);
+        const totalDefectPercent = lot.sampleQty > 0 ? (totalDefectQty / lot.sampleQty) * 100 : 0;
+
+        return {
+          lot,
+          defects,
+          defectSummary,
+          totalDefectQty,
+          calculated: {
+            okQty: lot.okQty,
+            ngQty: lot.ngQty,
+            okPercent: lot.okPercent,
+            ngPercent: lot.ngPercent,
+            totalDefectPercent,
+          },
+        };
+      } catch (err) {
+        throw new Error('Không thể tải chi tiết LOT: ' + (err.message || err));
+      }
+    },
+
+    async getMonthlyStats(month) {
+      try {
+        const monthStart = new Date(`${month}-01T00:00:00`);
+        const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 1);
+        const { data: lots, error } = await sb.from('iqc_lots').select('*')
+          .gte('created_at', monthStart.toISOString())
+          .lt('created_at', monthEnd.toISOString())
+          .order('created_at', { ascending: false });
+        if (error) throw error;
+
+        const normLots = safeRows(lots).map(normalizeLot);
+        const lotIds = normLots.map((lot) => lot.id);
+        let defectRows = [];
+        if (lotIds.length) {
+          const { data, error: defectError } = await sb.from('iqc_defects').select('*').in('lot_id', lotIds);
+          if (defectError) throw defectError;
+          defectRows = safeRows(data);
+        }
+
+        const totalLotQty = normLots.reduce((sum, lot) => sum + lot.lotQty, 0);
+        const totalSampleQty = normLots.reduce((sum, lot) => sum + lot.sampleQty, 0);
+        const okLots = normLots.filter((lot) => lot.result === 'OK').length;
+        const ngLots = normLots.filter((lot) => lot.result === 'NG').length;
+        const pendingLots = normLots.filter((lot) => !lot.result).length;
+
+        const productMap = new Map();
+        normLots.forEach((lot) => {
+          const key = `${lot.productCode}|${lot.productName}`;
+          if (!productMap.has(key)) {
+            productMap.set(key, {
+              productCode: lot.productCode,
+              productName: lot.productName,
+              lotCount: 0,
+              lotQty: 0,
+              sampleQty: 0,
+              okLots: 0,
+              ngLots: 0,
+            });
+          }
+          const item = productMap.get(key);
+          item.lotCount += 1;
+          item.lotQty += lot.lotQty;
+          item.sampleQty += lot.sampleQty;
+          if (lot.result === 'OK') item.okLots += 1;
+          if (lot.result === 'NG') item.ngLots += 1;
+        });
+
+        const defectMap = new Map();
+        defectRows.forEach((row) => {
+          const key = row.defect_name || row.defect_type || 'Khác';
+          const current = defectMap.get(key) || { name: key, qty: 0, rows: 0 };
+          current.qty += toNumber(row.defect_qty, 0);
+          current.rows += 1;
+          defectMap.set(key, current);
+        });
+
+        return {
+          month,
+          totalLots: normLots.length,
+          totalLotQty,
+          totalSampleQty,
+          okLots,
+          ngLots,
+          pendingLots,
+          products: Array.from(productMap.values()),
+          defects: Array.from(defectMap.values()).sort((a, b) => b.qty - a.qty),
+          refreshedAt: new Date().toLocaleTimeString('vi-VN'),
+        };
+      } catch (err) {
+        console.warn('getMonthlyStats fallback:', err.message || err);
+        return {
+          month,
+          totalLots: 0,
+          totalLotQty: 0,
+          totalSampleQty: 0,
+          okLots: 0,
+          ngLots: 0,
+          pendingLots: 0,
+          products: [],
+          defects: [],
+          refreshedAt: new Date().toLocaleTimeString('vi-VN'),
+        };
+      }
+    },
+  };
+
+  const googleRun = {
+    _success: null,
+    _failure: null,
+    withSuccessHandler(handler) {
+      this._success = handler;
+      return this;
+    },
+    withFailureHandler(handler) {
+      this._failure = handler;
+      return this;
+    },
+  };
+
+  const runner = googleRun;
+
+  Object.keys(IqcApi).forEach((fnName) => {
+    googleRun[fnName] = (...args) => {
+      (async () => {
+        try {
+          const result = await IqcApi[fnName](...args);
+          if (runner._success) {
+            runner._success(result);
+          }
+        } catch (err) {
+          if (runner._failure) {
+            runner._failure(err);
+          } else {
+            console.error(err);
+          }
+        } finally {
+          runner._success = null;
+          runner._failure = null;
+        }
+      })();
+      return googleRun;
+    };
+  });
+
+  window.google = window.google || {};
+  window.google.script = { run: googleRun };
+})();
+</script>
+<script>
+let dashboard={lots:[],defects:[]},editingId=null,completingId=null,completingLot=null,currentPage='iqc',statsRefreshTimer=null;const $=id=>document.getElementById(id),val=id=>$(id).value;function esc(x){return String(x??'').replace(/[&<>\"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#039;'}[m]));}
 function clock(){$('clock').innerText=new Date().toLocaleString('vi-VN');}setInterval(clock,1000);clock();function nowInput(){const d=new Date();d.setMinutes(d.getMinutes()-d.getTimezoneOffset());return d.toISOString().slice(0,16)}
 function showPage(p){
   currentPage=p;
