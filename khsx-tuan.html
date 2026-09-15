@@ -1222,102 +1222,44 @@ document.getElementById('btnNhapExcel').addEventListener('click', async () => {
 });
 
 document.getElementById('fileNhapExcel').addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  e.target.value = '';
-  if (!file) return;
-
-  const buf = await file.arrayBuffer();
-  const wb = XLSX.read(buf, { type: 'array' });
-  // File mẫu mới có 1 sheet / bộ phận — đọc đúng sheet trùng tên TAB đang mở.
-  // File cũ (1 sheet): lấy sheet đầu tiên không phải sheet phụ trợ.
-  const SKIP_SHEETS = ['Hướng dẫn sử dụng', '_DM', 'Danh mục (tham khảo)'];
-  const sheetName = wb.SheetNames.includes(activeTab)
-    ? activeTab
-    : (wb.SheetNames.find(n => !SKIP_SHEETS.includes(n)) || wb.SheetNames[0]);
-  const ws = wb.Sheets[sheetName];
-  if (!ws) return showMsg('File không có sheet "' + activeTab + '" — tải lại file mẫu mới nhất', 'err', 5000);
-  const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
-  if (aoa.length < 2) return showMsg('Sheet "' + sheetName + '" không có dòng dữ liệu nào', 'err', 3000);
-
-  const header = aoa[0].map(h => String(h || '').trim().toLowerCase());
-  const idx = name => header.indexOf(name);
-  const iMay = idx('mã máy'), iSp = idx('mã sp'), iKhuon = idx('số khuôn'), iGhiChu = idx('ghi chú');
-  const iDays = DAY_COLS.map(d => idx(d.toLowerCase()));
-
-  if (activeTab === 'Đúc' && (iMay === -1 || iSp === -1)) {
-    return showMsg('File thiếu cột "Mã máy" hoặc "Mã SP" — dùng đúng file mẫu đã tải cho tab Đúc', 'err', 4000);
-  }
-  if (activeTab !== 'Đúc' && iSp === -1) {
-    return showMsg('File thiếu cột "Mã SP" — dùng đúng file mẫu đã tải', 'err', 4000);
-  }
-
-  const parsed = [];
-  for (let r = 1; r < aoa.length; r++) {
-    const row = aoa[r];
-    const maSp = String(row[iSp] ?? '').trim();
-    const maMay = activeTab === 'Đúc' ? String(row[iMay] ?? '').trim() : '';
-    if (!maSp && !maMay) continue; // dòng trống, bỏ qua
-    if (iGhiChu !== -1 && String(row[iGhiChu] ?? '').toUpperCase().includes('DÒNG VÍ DỤ')) continue; // dòng ví dụ trong file mẫu
-    if (activeTab === 'Đúc' && (!maMay || !maSp)) {
-      return showMsg('Dòng ' + (r+1) + ': thiếu Mã máy hoặc Mã SP', 'err', 4000);
+  const file=e.target.files[0]; e.target.value=''; if(!file)return;
+  try{
+    const wb=XLSX.read(await file.arrayBuffer(),{type:'array'});
+    const skip=['Hướng dẫn sử dụng','_DM','Danh mục (tham khảo)'];
+    const sheetName=wb.SheetNames.includes(activeTab)?activeTab:(wb.SheetNames.find(n=>!skip.includes(n))||wb.SheetNames[0]);
+    const ws=wb.Sheets[sheetName]; if(!ws)throw new Error('File không có sheet "'+activeTab+'"');
+    const aoa=XLSX.utils.sheet_to_json(ws,{header:1,defval:''}); if(aoa.length<2)throw new Error('Sheet không có dữ liệu');
+    const norm=x=>String(x||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d');
+    const header=aoa[0].map(norm), find=(...names)=>header.findIndex(h=>names.map(norm).includes(h));
+    const iMay=find('Mã máy','Ma may'),iSp=find('Mã SP','Ma SP','Mã sản phẩm'),iKhuon=find('Số khuôn','So khuon'),iNote=find('Ghi chú','Ghi chu');
+    const iDays=DAY_COLS.map(d=>find(d));
+    if(iSp<0 || (activeTab==='Đúc'&&iMay<0))throw new Error('Thiếu cột bắt buộc Mã SP'+(activeTab==='Đúc'?' hoặc Mã máy':''));
+    const items=[];
+    for(let r=1;r<aoa.length;r++){
+      const row=aoa[r],ma_sp=String(row[iSp]??'').trim(),ma_may=activeTab==='Đúc'?String(row[iMay]??'').trim():'';
+      if(!ma_sp&&!ma_may)continue; if(iNote>=0&&norm(row[iNote]).includes('dong vi du'))continue;
+      const errors=[]; if(!ma_sp)errors.push('Thiếu Mã SP'); if(activeTab==='Đúc'&&!ma_may)errors.push('Thiếu Mã máy');
+      if(ma_sp&&!productMap[ma_sp])errors.push('Mã SP không có trong Master');
+      if(activeTab==='Đúc'&&ma_may&&!machineList.includes(ma_may))errors.push('Mã máy không có trong Master');
+      const vals=iDays.map(i=>i<0?0:Number(row[i]||0)); if(vals.some(v=>!Number.isFinite(v)||v<0||!Number.isInteger(v)))errors.push('Sản lượng ngày phải là số nguyên ≥ 0');
+      let so_khuon=iKhuon<0?'':String(row[iKhuon]??'').trim();
+      if(activeTab==='Đúc'){const molds=moldsByProduct[ma_sp]||[];if(!so_khuon&&molds.length===1)so_khuon=molds[0];if(!so_khuon)errors.push('Thiếu Số khuôn');else if(molds.length&&!molds.includes(so_khuon))errors.push('Số khuôn không thuộc Mã SP')}
+      items.push({line:r+1,ma_sp,ma_may,so_khuon,t2:vals[0],t3:vals[1],t4:vals[2],t5:vals[3],t6:vals[4],t7:vals[5],cn:vals[6],ghi_chu:iNote<0?'':String(row[iNote]??'').trim(),errors});
     }
-    if (activeTab !== 'Đúc' && !maSp) {
-      return showMsg('Dòng ' + (r+1) + ': thiếu Mã SP', 'err', 4000);
-    }
-    const days = iDays.map(ci => ci === -1 ? 0 : (Number(row[ci]) || 0));
-    let soKhuon = iKhuon === -1 ? '' : String(row[iKhuon] ?? '').trim();
-    // Đúc bắt buộc phải có số khuôn — nếu file không ghi (hoặc để trống), tự
-    // điền theo khuôn đã khai báo cho mã SP (master_products.so_khuon), kể cả
-    // trường hợp nhiều mã SP dùng chung 1 khuôn (chỉ tự điền khi mã SP đó có
-    // ĐÚNG 1 khuôn — nhiều khuôn thì bắt buộc người dùng tự ghi rõ trong file).
-    if (activeTab === 'Đúc') {
-      const molds = moldsByProduct[maSp] || [];
-      if (!soKhuon) {
-        if (molds.length === 1) soKhuon = molds[0];
-        else return showMsg('Dòng ' + (r+1) + ' (mã SP ' + maSp + '): thiếu Số khuôn — công đoạn Đúc bắt buộc phải có số khuôn' + (molds.length > 1 ? ' (SP này có ' + molds.length + ' khuôn, phải ghi rõ khuôn nào trong file)' : ''), 'err', 5000);
-      } else if (molds.length && !molds.includes(soKhuon)) {
-        return showMsg('Dòng ' + (r+1) + ' (mã SP ' + maSp + '): số khuôn "' + soKhuon + '" không thuộc khuôn khai báo của SP này — chỉ được là: ' + molds.join(', '), 'err', 6000);
-      }
-    }
-    parsed.push({
-      ma_may: maMay, ma_sp: maSp,
-      ten_sp: productMap[maSp] || '',
-      so_khuon: soKhuon,
-      days, ghi_chu: iGhiChu === -1 ? '' : String(row[iGhiChu] ?? '').trim(),
-    });
-  }
-  if (parsed.length === 0) return showMsg('Không có dòng dữ liệu hợp lệ trong file', 'err', 3000);
-
-  if (!confirm('Nhập ' + parsed.length + ' dòng kế hoạch từ Excel vào ' + activeTab + ' tuần ' + fmtDate(weekMonday) + '? Các dòng trùng Mã máy/Mã SP sẽ bị GHI ĐÈ.')) return;
-
-  const ok = await ghiLogVaXinLyDoNeuCan('sua', 'Nhập từ Excel (' + parsed.length + ' dòng)', '', '');
-  if (!ok) return;
-
-  const user = await MesAuth.getCurrentUserIdentity();
-  const nowIso = new Date().toISOString();
-  let error;
-  if (activeTab === 'Đúc') {
-    const payloads = parsed.map(p => ({
-      tuan_bat_dau: fmtDate(weekMonday), ma_may: p.ma_may, ma_sp: p.ma_sp, ten_sp: p.ten_sp,
-      so_khuon: p.so_khuon, kh_tuan: p.days.reduce((s,x)=>s+x,0),
-      t2: p.days[0], t3: p.days[1], t4: p.days[2], t5: p.days[3], t6: p.days[4], t7: p.days[5], cn: p.days[6],
-      ghi_chu: p.ghi_chu, updated_by: user, updated_at: nowIso,
-    }));
-    ({ error } = await sb.from('duc_khsx_tuan_plan').upsert(payloads, { onConflict: 'tuan_bat_dau,ma_may,ma_sp' }));
-  } else {
-    const payloads = parsed.map(p => ({
-      tuan_bat_dau: fmtDate(weekMonday), cong_doan: activeTab, ma_sp: p.ma_sp, ten_sp: p.ten_sp,
-      kh_tuan: p.days.reduce((s,x)=>s+x,0),
-      t2: p.days[0], t3: p.days[1], t4: p.days[2], t5: p.days[3], t6: p.days[4], t7: p.days[5], cn: p.days[6],
-      ghi_chu: p.ghi_chu, updated_by: user, updated_at: nowIso,
-    }));
-    ({ error } = await sb.from('cd_khsx_tuan_plan').upsert(payloads, { onConflict: 'tuan_bat_dau,cong_doan,ma_sp' }));
-  }
-  if (error) return showMsg('Lỗi nhập Excel: ' + error.message, 'err');
-  showMsg('✓ Đã nhập ' + parsed.length + ' dòng từ Excel', 'ok', 2500);
-  loadActivePanel(); loadDuyetInfo(); loadChangeLog();
+    if(!items.length)throw new Error('Không có dòng dữ liệu để xem trước');
+    const seen=new Set(); items.forEach(x=>{const k=activeTab==='Đúc'?x.ma_may+'|'+x.ma_sp:x.ma_sp;if(seen.has(k))x.errors.push('Trùng trong file');seen.add(k)});
+    const table=activeTab==='Đúc'?'duc_khsx_tuan_plan':'cd_khsx_tuan_plan';let q=sb.from(table).select(activeTab==='Đúc'?'ma_may,ma_sp':'ma_sp').eq('tuan_bat_dau',fmtDate(weekMonday));if(activeTab!=='Đúc')q=q.eq('cong_doan',activeTab);
+    const existing=await q;if(existing.error)throw existing.error;const keys=new Set((existing.data||[]).map(x=>activeTab==='Đúc'?x.ma_may+'|'+x.ma_sp:x.ma_sp));items.forEach(x=>{if(keys.has(activeTab==='Đúc'?x.ma_may+'|'+x.ma_sp:x.ma_sp))x.errors.push('Kế hoạch đã tồn tại, không được import ghi đè')});
+    showImportPreview(items,sheetName);
+  }catch(err){showMsg('Lỗi đọc file Excel: '+(err.message||err),'err',6000)}
 });
 
+function showImportPreview(items,sheetName){
+  document.getElementById('importPreview')?.remove();const bad=items.filter(x=>x.errors.length).length;const mask=document.createElement('div');mask.id='importPreview';mask.className='modal-mask open';
+  mask.innerHTML='<div class="modal" style="max-width:1100px"><div class="modal-head"><b>Xem trước nạp KHSX — '+escapeHtml(sheetName)+'</b><button class="modal-close" data-close>×</button></div><div class="modal-body" style="display:block"><p><b>'+items.length+'</b> dòng · <b style="color:#047857">'+(items.length-bad)+' hợp lệ</b> · <b style="color:#b91c1c">'+bad+' lỗi</b></p><div class="tbl-wrap" style="margin-top:10px;max-height:55vh"><table><thead><tr><th>Dòng</th><th>Mã máy</th><th>Mã SP</th><th>Số khuôn</th><th>T2…CN</th><th>Kết quả</th></tr></thead><tbody>'+items.map(x=>'<tr><td>'+x.line+'</td><td>'+escapeHtml(x.ma_may)+'</td><td>'+escapeHtml(x.ma_sp)+'</td><td>'+escapeHtml(x.so_khuon)+'</td><td>'+[x.t2,x.t3,x.t4,x.t5,x.t6,x.t7,x.cn].join(' / ')+'</td><td style="color:'+(x.errors.length?'#b91c1c':'#047857')+'">'+escapeHtml(x.errors.join('; ')||'Hợp lệ')+'</td></tr>').join('')+'</tbody></table></div></div><div class="modal-foot"><button class="btn btn-outline" data-close>Hủy</button><button class="btn" id="confirmImport" '+(bad?'disabled':'')+'>Xác nhận nạp</button></div></div>';
+  document.body.appendChild(mask);mask.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>mask.remove());const confirmBtn=mask.querySelector('#confirmImport');if(!confirmBtn)return;
+  confirmBtn.onclick=async()=>{confirmBtn.disabled=true;const ok=await ghiLogVaXinLyDoNeuCan('sua','Nhập từ Excel ('+items.length+' dòng)','','');if(!ok){confirmBtn.disabled=false;return}const actor=await MesAuth.getCurrentUserIdentity();const rows=items.map(({line,errors,...x})=>x);const {data,error}=await sb.rpc('khsx_import_week_plan',{p_week:fmtDate(weekMonday),p_department:activeTab,p_rows:rows,p_actor:actor});if(error){confirmBtn.disabled=false;return showMsg('Không thể nạp: '+error.message+'. Không có dòng nào được ghi.','err',7000)}mask.remove();showMsg('✓ Đã nạp '+(data?.inserted||items.length)+' dòng.','ok',3000);loadActivePanel();loadDuyetInfo();loadChangeLog()};
+}
 document.getElementById('btnPrevWeek').addEventListener('click', () => { weekMonday.setDate(weekMonday.getDate()-7); onWeekChange(); });
 document.getElementById('btnNextWeek').addEventListener('click', () => { weekMonday.setDate(weekMonday.getDate()+7); onWeekChange(); });
 document.getElementById('btnThisWeek').addEventListener('click', () => { weekMonday = mondayOf(new Date()); onWeekChange(); });

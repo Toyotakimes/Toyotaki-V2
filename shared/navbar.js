@@ -42,7 +42,8 @@
     { label: 'Chất lượng', items: [
       { label: 'IPQC', href: 'ipqc.html' },
       { label: 'IQC', href: 'iqc.html' },
-      { label: 'OQC', href: 'oqc.html' },
+      { label: 'OQC nhập kiểm tra', href: 'oqc-daily.html' },
+      { label: 'OQC đóng gói', href: 'oqc.html' },
       { label: 'QC Manager / NCP', href: 'qc-manager.html' },
     ] },
     { label: 'Kho & Truy xuất', items: [
@@ -70,6 +71,7 @@
     'iqc.html': { icon: '📋', title: 'IQC — Dashboard đầu vào', desc: 'Theo dõi LOT, NCC, lỗi, tỷ lệ NG theo thời gian' },
     'chuyencongdoan.html': { icon: '🔀', title: 'Chuyển công đoạn & Đóng gói', desc: 'Quét QR chuyển hàng, đóng gói lại, đổi mã SP', noTitleBar: true },
     'oqc.html': { icon: '📦', title: 'OQC — Đóng gói Pallet', desc: 'Quét tem, gom pallet, đóng gói', noTitleBar: true },
+    'oqc-daily.html': { icon: '✅', title: 'OQC — Kiểm tra sau gia công', desc: 'Nhập nhanh OK, NG và chi tiết lỗi hằng ngày', noTitleBar: true },
     'kho-thanh-pham.html': { icon: '🏬', title: 'Kho Thành Phẩm', desc: 'Nhập kho / Xuất hàng bằng QR', noTitleBar: true },
     'truy-xuat-nguon-goc.html': { icon: '🔍', title: 'Truy Xuất Nguồn Gốc', desc: 'Phả hệ tem: tách/gộp xuyên công đoạn', noTitleBar: true },
     'tra-cuu-tem.html': { icon: '🏷️', title: 'Tra Cứu Tem Đã In', desc: 'Danh sách tem — lọc theo ngày in/máy/mã SP', noTitleBar: true },
