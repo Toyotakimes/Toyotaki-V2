@@ -923,7 +923,7 @@ async function submitCheck(ketQua){
 
     showOverlay('Đang lưu kết quả...');
     const thoiGianKiemGiay = state.checkStartedAt ? Math.round((Date.now() - state.checkStartedAt) / 1000) : null;
-    const rpcName = ketQua === 'NG' ? 'duc_submit_ipqc_check_and_hold' : 'duc_submit_ipqc_check';
+    const rpcName = ketQua === 'NG' ? 'duc_submit_ipqc_check_and_hold' : 'duc_submit_ipqc_check_10';
     const rpcPayload = {
       p_id_checkpoint: state.current.id_checkpoint,
       p_checklist: state.checklistAnswers,

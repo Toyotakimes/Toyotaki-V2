@@ -1,5 +1,25 @@
 -- T37 — IPQC quét tem, tối đa 10 ảnh, tự mở NCP và HOLD ngay trong một giao dịch.
 -- Phụ thuộc T30 và T35. Tái sử dụng duc_ncp + duc_tem_cach_ly, không tạo bảng HOLD mới.
+create or replace function public.duc_submit_ipqc_check_10(
+  p_id_checkpoint text, p_checklist jsonb, p_ket_qua text, p_anh_urls jsonb,
+  p_ghi_chu text, p_thoi_gian_kiem_giay numeric, p_nguoi_kiem text
+) returns jsonb language plpgsql security definer set search_path=public as $$
+declare v_result jsonb;
+begin
+  if auth.uid() is null then raise exception 'Cần đăng nhập MES'; end if;
+  if jsonb_typeof(coalesce(p_anh_urls,'[]'::jsonb))<>'array' or jsonb_array_length(coalesce(p_anh_urls,'[]'::jsonb)) not between 1 and 10 then
+    raise exception 'Mỗi phiếu IPQC phải có từ 1 đến 10 ảnh';
+  end if;
+  select duc_submit_ipqc_check(p_id_checkpoint,p_checklist,p_ket_qua,
+    (select coalesce(jsonb_agg(value),'[]'::jsonb) from (select value from jsonb_array_elements(p_anh_urls) with ordinality e(value,n) where n<=6 order by n) x),
+    p_ghi_chu,p_thoi_gian_kiem_giay,p_nguoi_kiem) into v_result;
+  if not coalesce((v_result->>'ok')::boolean,false) then raise exception '%',coalesce(v_result->>'error','Không lưu được IPQC'); end if;
+  update duc_ipqc_checkpoint set anh_bang_chung_url=p_anh_urls where id_checkpoint=p_id_checkpoint;
+  return v_result;
+end $$;
+revoke execute on function public.duc_submit_ipqc_check_10(text,jsonb,text,jsonb,text,numeric,text) from anon;
+grant execute on function public.duc_submit_ipqc_check_10(text,jsonb,text,jsonb,text,numeric,text) to authenticated;
+
 create or replace function public.duc_submit_ipqc_check_and_hold(
   p_id_checkpoint text, p_checklist jsonb, p_ket_qua text, p_anh_urls jsonb,
   p_ghi_chu text, p_thoi_gian_kiem_giay numeric, p_nguoi_kiem text, p_tag_no text
@@ -66,4 +86,3 @@ begin
 end $$;
 revoke execute on function public.duc_ncp_giai_toa_tem(text,text,text) from anon;
 grant execute on function public.duc_ncp_giai_toa_tem(text,text,text) to authenticated;
-
