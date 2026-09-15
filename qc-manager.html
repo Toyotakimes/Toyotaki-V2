@@ -176,6 +176,7 @@ tr:last-child td{border-bottom:none}
       <button class="tab-btn" id="tab-btn-tracuu" onclick="switchTab('tracuu')">Tra cứu lịch sử</button>
       <button class="tab-btn" id="tab-btn-ncp" onclick="switchTab('ncp')">Xử lý sản phẩm không phù hợp</button>
       <button class="tab-btn" id="tab-btn-tieuchuan" onclick="switchTab('tieuchuan')">Quản lý tiêu chuẩn</button>
+      <button class="tab-btn" onclick="location.href='ipqc-approval.html'">⚠ Duyệt cảnh báo IPQC</button>
     </div>
     <div class="live-badge"><span class="live-dot"></span><span id="live-status">Đang tải...</span></div>
     <div class="header-clock">
@@ -842,6 +843,7 @@ function doneRowHtml(d){
       ${scBadge}
       ${d.id_van_de_lien_quan ? '<span class="pill neutral" title="Đã tạo bản ghi vấn đề khuôn ' + escapeHtml(d.id_van_de_lien_quan) + '">Đã báo khuôn</span>' : ''}
       ${ipqcNote}
+      ${d.ket_qua !== 'OK' ? '<a class="link-btn" href="ipqc-approval.html?machine='+encodeURIComponent(d.ma_may)+'&productCode='+encodeURIComponent(d.ma_sp)+'&warningLevel='+(d.ket_qua==='NG'?'NG':'EARLY_WARNING')+'&warningContent='+encodeURIComponent(ipqcNoteParts.join(' — '))+'">Yêu cầu tiếp tục chạy</a>' : ''}
       ${(!d.anh_bang_chung_urls || !d.anh_bang_chung_urls.length) && !d.id_van_de_lien_quan && !scBadge && !ipqcNote ? '—' : ''}
     </td>
   </tr>`;
