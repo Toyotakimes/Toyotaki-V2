@@ -504,12 +504,10 @@ async function loadDashboard(){
   try {
     const d = await IqcApi.getDashboardData();
     renderDashboard(d);
-    const session = await MesAuth.getSession();
-    $('iqcConnection').innerText = session ? 'Đã kết nối IQC. Bạn có thể nhập và lưu dữ liệu trực tiếp.' : 'Đã kết nối IQC. Đăng nhập tài khoản MES để lưu dữ liệu.';
-    $('iqcLogin').classList.toggle('hidden', !!session);
     if(currentPage==='stats') loadStats();
   } catch (e) {
-    $('iqcConnection').innerText = 'Không tải được dữ liệu IQC: ' + (e.message || e) + '. Nếu chưa tạo bảng IQC, cần chạy migration_phase_S9_iqc_tables.sql trong Supabase.';
+    console.error('Không tải được dữ liệu IQC:', e);
+    $('lotTable').innerHTML='<tr><td colspan="20" style="text-align:center;color:#b91c1c">Không tải được dữ liệu IQC: '+esc(e.message||e)+'</td></tr>';
   }
 }
 function renderDashboard(d){dashboard=d;['total','waiting','checking','done','ok','ng'].forEach(k=>$(k).innerText=d.summary[k]);const tb=$('lotTable');tb.innerHTML='';d.lots.forEach(l=>{const st=l.status==='Đang kiểm tra'?`<span class="badge badge-check">${esc(l.status)}</span>`:l.status==='Đã kiểm tra'?`<span class="badge badge-ok">${esc(l.status)}</span>`:`<span class="badge badge-wait">${esc(l.status)}</span>`;const res=l.result==='OK'?'<span class="badge badge-ok">OK</span>':l.result==='NG'?'<span class="badge badge-ng">NG</span>':'<span class="badge badge-wait">Chưa có</span>';const action=l.status!=='Đã kiểm tra'?`<button class="button btn-success btn-small" onclick="openComplete('${esc(l.id)}')">Hoàn thành kiểm tra</button>`:'';tb.innerHTML+=`<tr><td>${esc(l.receivedDate)}</td><td>${esc(l.pickupDate)}</td><td>${esc(l.supplier)}</td><td>${esc(l.productCode)}</td><td>${esc(l.productName)}</td><td><b>${esc(l.lotNo)}</b></td><td>${l.lotQty}</td><td>${esc(l.inspectionType)}</td><td>${l.sampleQty}</td><td>${esc(l.aql||'—')}</td><td>${esc(l.location)}</td><td>${st}</td><td class="timer ${l.completedMs?'done':''}" data-start="${l.startMs||''}" data-end="${l.completedMs||''}" data-min="${l.inspectionMinutes||0}" data-status="${esc(l.status||'')}">${timerText(l)}</td><td>${res}</td><td class="ok">${l.inspectionType==='Kiểm tra 100%'?l.okQty:'—'}</td><td class="ng">${l.inspectionType==='Kiểm tra 100%'?l.ngQty:'—'}</td><td>${l.inspectionType==='Kiểm tra 100%'?Number(l.okPercent).toFixed(2)+'%':'—'}</td><td>${l.inspectionType==='Kiểm tra 100%'?Number(l.ngPercent).toFixed(2)+'%':'—'}</td><td class="note-cell">${esc(l.note||'')}</td><td><button class="button btn-secondary btn-small" onclick="editLot('${esc(l.id)}')">Sửa</button> <button class="button btn-danger btn-small" onclick="deleteLotUI('${esc(l.id)}','${esc(l.lotNo)}')">Xóa</button> ${action}</td></tr>`});renderDefects(d.defects);populateDefectLots();refreshTimers();}

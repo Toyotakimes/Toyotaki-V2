@@ -1,4 +1,39 @@
 -- T40 - Du lieu IQC cu do nguoi dung cung cap (08-09/2026). Idempotent theo ma phieu.
+-- Database hien tai chua co bat ky bang IQC nao, nen migration nay tu tao schema truoc khi nap du lieu cu.
+create table if not exists public.iqc_lots(
+ id bigserial primary key,received_at timestamptz,pickup_at timestamptz,completed_at timestamptz,supplier text,
+ product_code text,product_name text,lot_no text,lot_qty numeric default 0,inspection_type text default 'Kiểm tra AQL',
+ aql text,sample_qty numeric default 0,location text default 'Kho',status text default 'Chưa lấy hàng',result text,
+ ok_qty numeric default 0,ng_qty numeric default 0,ok_pct numeric default 0,ng_pct numeric default 0,inspector text,
+ note text,inspection_minutes integer default 0,created_at timestamptz not null default now(),updated_at timestamptz not null default now()
+);
+create table if not exists public.iqc_defects(
+ id bigserial primary key,lot_id bigint not null references public.iqc_lots(id) on delete cascade,defect_type text default 'NG khác',
+ defect_name text,defect_qty numeric default 0,defect_percent numeric default 0,note text,images text,
+ created_at timestamptz not null default now(),updated_at timestamptz not null default now()
+);
+create table if not exists public.iqc_appearance_defects(id serial primary key,label text not null unique,sort_order integer not null default 100,created_at timestamptz not null default now());
+create table if not exists public.iqc_lot_audit(id bigserial primary key,lot_id bigint,action text not null,old_data jsonb,new_data jsonb,actor uuid default auth.uid(),changed_at timestamptz not null default now());
+create index if not exists idx_iqc_lots_created_at on public.iqc_lots(created_at desc);
+create index if not exists idx_iqc_lots_product on public.iqc_lots(product_code,product_name,lot_no);
+create index if not exists idx_iqc_defects_lot_id on public.iqc_defects(lot_id);
+alter table public.iqc_lots enable row level security;alter table public.iqc_defects enable row level security;alter table public.iqc_appearance_defects enable row level security;alter table public.iqc_lot_audit enable row level security;
+drop policy if exists "public read iqc_lots" on public.iqc_lots;create policy "public read iqc_lots" on public.iqc_lots for select using(true);
+drop policy if exists "authenticated insert iqc_lots" on public.iqc_lots;create policy "authenticated insert iqc_lots" on public.iqc_lots for insert to authenticated with check(auth.uid() is not null);
+drop policy if exists "authenticated update iqc_lots" on public.iqc_lots;create policy "authenticated update iqc_lots" on public.iqc_lots for update to authenticated using(auth.uid() is not null) with check(auth.uid() is not null);
+drop policy if exists "authenticated delete iqc_lots" on public.iqc_lots;create policy "authenticated delete iqc_lots" on public.iqc_lots for delete to authenticated using(auth.uid() is not null);
+drop policy if exists "public read iqc_defects" on public.iqc_defects;create policy "public read iqc_defects" on public.iqc_defects for select using(true);
+drop policy if exists "authenticated insert iqc_defects" on public.iqc_defects;create policy "authenticated insert iqc_defects" on public.iqc_defects for insert to authenticated with check(auth.uid() is not null);
+drop policy if exists "authenticated update iqc_defects" on public.iqc_defects;create policy "authenticated update iqc_defects" on public.iqc_defects for update to authenticated using(auth.uid() is not null) with check(auth.uid() is not null);
+drop policy if exists "authenticated delete iqc_defects" on public.iqc_defects;create policy "authenticated delete iqc_defects" on public.iqc_defects for delete to authenticated using(auth.uid() is not null);
+drop policy if exists "public read iqc_appearance_defects" on public.iqc_appearance_defects;create policy "public read iqc_appearance_defects" on public.iqc_appearance_defects for select using(true);
+drop policy if exists "authenticated write iqc_appearance_defects" on public.iqc_appearance_defects;create policy "authenticated write iqc_appearance_defects" on public.iqc_appearance_defects for all to authenticated using(auth.uid() is not null) with check(auth.uid() is not null);
+drop policy if exists "authenticated read iqc audit" on public.iqc_lot_audit;create policy "authenticated read iqc audit" on public.iqc_lot_audit for select to authenticated using(true);
+create or replace function public.iqc_touch_updated_at()returns trigger language plpgsql as $$begin new.updated_at=now();return new;end$$;
+drop trigger if exists trg_iqc_lots_touch on public.iqc_lots;create trigger trg_iqc_lots_touch before update on public.iqc_lots for each row execute function public.iqc_touch_updated_at();
+drop trigger if exists trg_iqc_defects_touch on public.iqc_defects;create trigger trg_iqc_defects_touch before update on public.iqc_defects for each row execute function public.iqc_touch_updated_at();
+create or replace function public.iqc_capture_lot_audit()returns trigger language plpgsql security definer set search_path=public as $$begin insert into iqc_lot_audit(lot_id,action,old_data,new_data)values(case when tg_op='DELETE' then old.id else new.id end,tg_op,case when tg_op in('UPDATE','DELETE')then to_jsonb(old)end,case when tg_op in('INSERT','UPDATE')then to_jsonb(new)end);if tg_op='DELETE' then return old;end if;return new;end$$;
+drop trigger if exists trg_iqc_lot_audit on public.iqc_lots;create trigger trg_iqc_lot_audit after insert or update or delete on public.iqc_lots for each row execute function public.iqc_capture_lot_audit();
 alter table public.iqc_lots add column if not exists legacy_id text;
 create unique index if not exists uq_iqc_lots_legacy_id on public.iqc_lots(legacy_id) where legacy_id is not null;
 insert into public.iqc_lots(legacy_id,received_at,pickup_at,completed_at,supplier,product_code,product_name,lot_no,lot_qty,inspection_type,aql,sample_qty,location,status,result,ok_qty,ng_qty,inspector,note,inspection_minutes) values
@@ -35,3 +70,9 @@ with d(legacy_id,defect_type,defect_name,qty,at) as(values
 insert into public.iqc_defects(lot_id,defect_type,defect_name,defect_qty,defect_percent,created_at)
 select l.id,d.defect_type,d.defect_name,d.qty,case when l.sample_qty>0 then d.qty*100/l.sample_qty else 0 end,d.at from d join public.iqc_lots l using(legacy_id)
 where not exists(select 1 from public.iqc_defects x where x.lot_id=l.id and x.defect_type=d.defect_type and x.defect_name=d.defect_name and x.defect_qty=d.qty);
+
+grant select on public.iqc_lots,public.iqc_defects,public.iqc_appearance_defects to anon,authenticated;
+grant insert,update,delete on public.iqc_lots,public.iqc_defects,public.iqc_appearance_defects to authenticated;
+grant select on public.iqc_lot_audit to authenticated;
+grant usage,select on sequence public.iqc_lots_id_seq,public.iqc_defects_id_seq,public.iqc_appearance_defects_id_seq to authenticated;
+notify pgrst,'reload schema';
