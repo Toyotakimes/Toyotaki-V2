@@ -71,7 +71,7 @@
     'iqc.html': { icon: '📋', title: 'IQC — Dashboard đầu vào', desc: 'Theo dõi LOT, NCC, lỗi, tỷ lệ NG theo thời gian' },
     'chuyencongdoan.html': { icon: '🔀', title: 'Chuyển công đoạn & Đóng gói', desc: 'Quét QR chuyển hàng, đóng gói lại, đổi mã SP', noTitleBar: true },
     'oqc.html': { icon: '📦', title: 'OQC — Đóng gói Pallet', desc: 'Quét tem, gom pallet, đóng gói', noTitleBar: true },
-    'oqc-daily.html': { icon: '✅', title: 'OQC — Kiểm tra thành phẩm', desc: 'Kiểm tra đầu ra trước khi xuất hàng', noTitleBar: true },
+    'oqc-daily.html': { icon: '✅', title: 'OQC — Kiểm tra xuất hàng', desc: 'Kiểm tra đầu ra trước khi xuất hàng', noTitleBar: true },
     'kho-thanh-pham.html': { icon: '🏬', title: 'Kho Thành Phẩm', desc: 'Nhập kho / Xuất hàng bằng QR', noTitleBar: true },
     'truy-xuat-nguon-goc.html': { icon: '🔍', title: 'Truy Xuất Nguồn Gốc', desc: 'Phả hệ tem: tách/gộp xuyên công đoạn', noTitleBar: true },
     'tra-cuu-tem.html': { icon: '🏷️', title: 'Tra Cứu Tem Đã In', desc: 'Danh sách tem — lọc theo ngày in/máy/mã SP', noTitleBar: true },
