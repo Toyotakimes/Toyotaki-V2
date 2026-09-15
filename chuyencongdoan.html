@@ -688,7 +688,7 @@ async function onQrDecoded(text){
   }
   const idNcpCl = await idNcpDangCachLy(tagNo);
   if (idNcpCl){
-    err("🔒 Tem " + tagNo + " đang bị CÁCH LY theo phiếu NCP " + idNcpCl + " — không thể chuyển công đoạn.");
+    err("⚠ LOT ĐANG BỊ KHÓA DO IPQC PHÁT HIỆN NG – KHÔNG ĐƯỢC CHUYỂN CÔNG ĐOẠN (Phiếu NCP " + idNcpCl + ")");
     return;
   }
 

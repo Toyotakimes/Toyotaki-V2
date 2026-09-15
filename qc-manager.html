@@ -348,7 +348,7 @@ tr:last-child td{border-bottom:none}
   <div class="tabpanel" id="tab-ncp">
     <div class="panel">
       <div class="panel-head">🚧 Phiếu đang xử lý <span class="count" id="ncp-open-count">0</span></div>
-      <div class="panel-actions"><button class="btn btn-primary" onclick="openNcpNewModal()">+ Mở phiếu mới</button></div>
+      <div class="panel-actions" style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary" onclick="openNcpNewModal()">+ Mở phiếu mới</button><button class="btn btn-outline" onclick="ncpQrCamera()">📷 Camera</button><button class="btn btn-outline" onclick="document.getElementById('ncp-qr-file').click()">🖼 Đọc QR từ ảnh</button><input type="file" accept="image/*" id="ncp-qr-file" class="hidden"><input id="ncp-qr-lookup" autocomplete="off" placeholder="Máy quét QR USB / nhập mã + Enter" style="padding:7px;min-width:260px"></div>
       <div class="panel-body table-wrap">
         <table>
           <thead><tr><th>Thẻ</th><th>Số phiếu</th><th>Máy</th><th>Mã SP</th><th>Nghi vấn</th><th>Đã lọc</th><th>OK</th><th>NG</th><th>Bước hiện tại</th><th>Duyệt NN & ĐS</th><th>Người đảm nhiệm</th><th>Thời gian</th><th></th></tr></thead>
@@ -519,8 +519,16 @@ tr:last-child td{border-bottom:none}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="shared/supabase-client.js"></script>
 <script src="shared/navbar.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 const state = { machines: [], products: [], productMap: {}, moldsByProduct: {}, dynamicFiltersLoaded: false, suCoPhutDungMap: {}, suCoLog: [], allIpqcHistory: [], ncpList: [], ncpAvailableNg: [], ncpLoaded: false, ncpCurrentCase: null, pdfBase64: null, pdfFileName: null, pdfBlob: null, currentUserEmail: '' };
+
+function ncpQrTag(raw){return String(raw||'').trim().split('>')[0].replace(/\s+/g,'')}
+async function openNcpByQr(raw){const tag=ncpQrTag(raw);if(!tag)return alert('Không đọc được Tag No');const {data,error}=await sb.rpc('duc_tem_id_ncp_cach_ly',{p_tag_no:tag});if(error)return alert(error.message);if(!data)return alert('LOT/Tem '+tag+' không có hồ sơ NG đang HOLD');location.href='ncp-detail.html?id='+encodeURIComponent(data)}
+document.getElementById('ncp-qr-lookup').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();openNcpByQr(e.target.value);e.target.value=''}});
+document.getElementById('ncp-qr-file').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const u=URL.createObjectURL(f),im=new Image();im.onload=()=>{const c=document.createElement('canvas');c.width=im.width;c.height=im.height;const x=c.getContext('2d');x.drawImage(im,0,0);const d=x.getImageData(0,0,c.width,c.height),q=jsQR(d.data,d.width,d.height);URL.revokeObjectURL(u);e.target.value='';q?openNcpByQr(q.data):alert('Không đọc được QR trong ảnh')};im.src=u});
+async function ncpQrCamera(){if(typeof Html5Qrcode!=='function')return alert('Chưa tải được thư viện QR');const host=document.createElement('div');host.id='ncp-live-reader';host.style.cssText='position:fixed;inset:0;background:#000;z-index:9999';document.body.appendChild(host);const close=document.createElement('button');close.textContent='✕ Đóng';close.style.cssText='position:absolute;right:12px;top:12px;z-index:2;padding:10px';host.appendChild(close);const view=document.createElement('div');view.id='ncp-live-reader-view';view.style.cssText='width:100%;height:100%';host.appendChild(view);const reader=new Html5Qrcode(view.id);const stop=async()=>{if(reader.isScanning)try{await reader.stop()}catch(e){};host.remove()};close.onclick=stop;try{await reader.start({facingMode:'environment'},{fps:10,qrbox:{width:260,height:260}},async text=>{await stop();openNcpByQr(text)},()=>{})}catch(e){stop();alert('Không mở được camera: '+e)}}
 
 function switchTab(tab){
   document.getElementById('tab-monitor').classList.toggle('active', tab === 'monitor');

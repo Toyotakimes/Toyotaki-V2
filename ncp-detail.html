@@ -171,6 +171,7 @@ header .sub{font-size:12px;color:#94A3B8;font-family:'JetBrains Mono',monospace}
       <div class="info-item"><span class="k">Người đảm nhiệm xử lý</span><span class="v" id="i-nguoi-dam-nhiem">—</span></div>
     </div>
     <div class="info-item"><span class="k">Mô tả lỗi</span><span class="v" id="i-mo-ta">—</span></div>
+    <div class="field-row"><label>Ảnh lỗi từ lần kiểm IPQC</label><div class="img-gallery" id="ipqc-evidence"></div></div>
     <div class="field-row">
       <label>Người đảm nhiệm trả lời Nguyên nhân & Đối sách</label>
       <input type="text" autocomplete="off" id="f-nguoi-dam-nhiem">
@@ -180,9 +181,10 @@ header .sub{font-size:12px;color:#94A3B8;font-family:'JetBrains Mono',monospace}
   <div class="panel">
     <div class="cause-title">🔒 Cách ly tem/thùng hàng <span style="font-weight:400;font-size:11px;color:var(--text-dim)">— chặn chuyển công đoạn / đóng gói lại / nhập kho / xuất hàng với tem thuộc diện nghi vấn</span></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-      <button type="button" class="btn btn-primary" id="btnScan">📷 Quét QR để cách ly</button>
-      <input type="file" id="qrFileInput" accept="image/*" capture="environment" style="display:none">
-      <input type="text" autocomplete="off" id="manualTagInput" class="manual-tag-input" placeholder="Hoặc gõ Tag No + Enter">
+      <button type="button" class="btn btn-primary" id="btnScan">📷 Quét QR bằng camera</button>
+      <button type="button" class="btn btn-outline" onclick="document.getElementById('qrFileInput').click()">🖼 Đọc QR từ ảnh</button>
+      <input type="file" id="qrFileInput" accept="image/*" style="display:none">
+      <input type="text" autocomplete="off" id="manualTagInput" class="manual-tag-input" autofocus placeholder="Máy quét QR USB / nhập mã thủ công + Enter">
     </div>
     <div class="cach-ly-list" id="cach-ly-list"></div>
   </div>
@@ -302,6 +304,8 @@ async function load(){
   if (!data) return alert('Không tìm thấy phiếu: ' + state.id);
 
   state.case = data;
+  state.ipqcEvidence = [];
+  if(data.id_checkpoint_goc){const {data:cp}=await sb.from('duc_ipqc_checkpoint').select('anh_bang_chung_url').eq('id_checkpoint',data.id_checkpoint_goc).maybeSingle();state.ipqcEvidence=jsonArr(cp&&cp.anh_bang_chung_url)}
   state.currentUserEmail = (await MesAuth.getCurrentUserIdentity()) || '';
   state.images.phat_sinh = jsonArr(data.hinh_anh_phat_sinh_json).slice();
   state.images.luu_xuat = jsonArr(data.hinh_anh_luu_xuat_json).slice();
@@ -329,6 +333,7 @@ function renderAll(){
   document.getElementById('i-ma-sp').textContent = c.ma_sp;
   document.getElementById('i-so-luong').textContent = c.so_luong_nghi_van;
   document.getElementById('i-mo-ta').textContent = c.mo_ta_loi;
+  document.getElementById('ipqc-evidence').innerHTML=(state.ipqcEvidence||[]).map(u=>'<div class="img-thumb"><img src="'+escapeHtml(u)+'" onclick="showLightbox(\''+escapeHtml(u)+'\')"></div>').join('')||'<span class="sub">Chưa có ảnh</span>';
   document.getElementById('i-nguoi-dam-nhiem').textContent = c.nguoi_dam_nhiem || '—';
   document.getElementById('f-nguoi-dam-nhiem').value = c.nguoi_dam_nhiem_doi_sach || '';
   document.getElementById('f-nn-phat-sinh').value = c.nguyen_nhan_phat_sinh || '';

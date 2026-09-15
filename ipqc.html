@@ -176,6 +176,15 @@ button{cursor:pointer;font-family:inherit}
     <div class="detail-sp" id="ck-ma-sp">—</div>
     <div class="detail-meta" id="ck-meta">—</div>
   </div>
+  <div class="field">
+    <label>LOT / Tem đang kiểm tra (bắt buộc trước khi kết luận NG)</label>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+      <button type="button" class="pdf-btn" onclick="openQrCamera()">📷 Quét QR bằng camera</button>
+      <input id="ck-qr-scanner" autocomplete="off" placeholder="Máy quét QR USB / nhập mã thủ công + Enter" style="flex:1;min-width:240px">
+      <button type="button" class="pdf-btn" onclick="decodeQrFromEvidence()">🖼 Đọc QR từ ảnh</button>
+    </div>
+    <div id="ck-tag-info" style="margin-top:.5rem;font-weight:700">Chưa chọn LOT/Tem</div>
+  </div>
   <div class="incident-info hidden" id="ck-incident-info">
     <div class="ii-title">⚠ Nội dung sự cố (trưởng ca đã ghi)</div>
     <div class="ii-row" id="ck-incident-loai"></div>
@@ -190,9 +199,11 @@ button{cursor:pointer;font-family:inherit}
   <div class="photo-wrap">
     <button class="photo-btn" id="ck-photo-btn" onclick="document.getElementById('ck-photo-input').click()">
       <span style="font-size:1.6rem">📷</span>
-      <span id="ck-photo-label">Bấm để chụp ảnh bằng chứng (bắt buộc, tối đa 6 ảnh)</span>
+      <span id="ck-photo-label">Thêm ảnh bằng chứng (bắt buộc, tối đa 10 ảnh)</span>
     </button>
-    <input type="file" accept="image/*" capture="environment" id="ck-photo-input" class="hidden" onchange="onPhotoSelected(event)">
+    <input type="file" accept="image/*" multiple id="ck-photo-input" class="hidden" onchange="onPhotoSelected(event)">
+    <button type="button" class="photo-btn" onclick="document.getElementById('ck-camera-input').click()">📸 Chụp ảnh trực tiếp</button>
+    <input type="file" accept="image/*" capture="environment" id="ck-camera-input" class="hidden" onchange="onPhotoSelected(event)">
     <div class="photo-grid" id="ck-photo-grid"></div>
   </div>
 
@@ -218,12 +229,16 @@ button{cursor:pointer;font-family:inherit}
   </div>
 </div>
 
+<div id="ck-qr-modal" style="display:none;position:fixed;inset:0;background:#000;z-index:9999"><button onclick="closeQrCamera()" style="position:absolute;right:12px;top:12px;z-index:2;padding:10px">✕ Đóng</button><div id="ck-qr-reader" style="width:100%;height:100%"></div></div>
+<canvas id="ck-qr-canvas" class="hidden"></canvas>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script src="shared/supabase-client.js"></script>
 <script src="shared/navbar.js"></script>
 <script>
 const IPQC_CHECK_INTERVAL_MIN = 120;   // CONFIG.IPQC_CHECK_INTERVAL_MIN (Config.js) — giữ khớp
-const IPQC_MAX_PHOTOS = 6;
+const IPQC_MAX_PHOTOS = 10;
 const IPQC_DEFAULT_CHECKLIST = [
   'Kích thước (theo bảng tuần kiểm)',
   'Ngoại quan — Cào xước; dính nhôm',
@@ -244,6 +259,7 @@ const state = {
   tieuChuan: null,
   checklistAnswers: [],
   photos: [],   // [{blob, mime, dataUrl}]
+  scannedTag: null,
   pollTimer: null,
   timerHandle: null,
 };
@@ -613,6 +629,8 @@ async function openCheck(idCheckpoint){
   }
 
   state.current = cp;
+  state.scannedTag = null;
+  document.getElementById('ck-tag-info').textContent = 'Chưa chọn LOT/Tem';
   state.checkStartedAt = Date.now();
   state.photos = [];
   renderPhotoGrid();
@@ -730,16 +748,16 @@ function setChecklistAnswer(i, dat){
 }
 
 function onPhotoSelected(e){
-  const file = e.target.files[0];
+  const files = Array.from(e.target.files || []);
   e.target.value = '';
-  if (!file) return;
-  if (state.photos.length >= IPQC_MAX_PHOTOS) return showToast('Đã đạt tối đa ' + IPQC_MAX_PHOTOS + ' ảnh', true);
-
+  if (!files.length) return;
+  if (state.photos.length + files.length > IPQC_MAX_PHOTOS) return showToast('Mỗi phiếu chỉ được tối đa ' + IPQC_MAX_PHOTOS + ' ảnh', true);
+  files.forEach(file => {
   const reader = new FileReader();
   reader.onload = ev => {
     const img = new Image();
     img.onload = () => {
-      const maxW = 1280;
+      const maxW = 1600;
       const scale = Math.min(1, maxW / img.width);
       const canvas = document.createElement('canvas');
       canvas.width = Math.round(img.width * scale);
@@ -747,13 +765,14 @@ function onPhotoSelected(e){
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       canvas.toBlob(blob => {
-        state.photos.push({ blob: blob, mime: 'image/jpeg', dataUrl: canvas.toDataURL('image/jpeg', 0.82) });
+        state.photos.push({ blob: blob, mime: 'image/jpeg', dataUrl: canvas.toDataURL('image/jpeg', 0.78), name:file.name });
         renderPhotoGrid();
-      }, 'image/jpeg', 0.82);
+      }, 'image/jpeg', 0.78);
     };
     img.src = ev.target.result;
   };
   reader.readAsDataURL(file);
+  });
 }
 
 function removePhoto(idx){
@@ -777,6 +796,26 @@ function renderPhotoGrid(){
   else if (n >= IPQC_MAX_PHOTOS) label.textContent = '✓ Đã đủ ' + IPQC_MAX_PHOTOS + ' ảnh (tối đa)';
   else label.textContent = '✓ Đã chụp ' + n + '/' + IPQC_MAX_PHOTOS + ' — bấm để chụp thêm';
   btn.disabled = n >= IPQC_MAX_PHOTOS;
+}
+
+function qrTag(raw){ return String(raw||'').trim().split('>')[0].replace(/\s+/g,''); }
+async function acceptQr(raw){
+  const tagNo=qrTag(raw); if(!tagNo)return showToast('Không đọc được mã tem/LOT',true);
+  const {data,error}=await sb.from('duc_tem').select('tag_no,ma_sp,lot,so_luong,may_duc_chi_thi').eq('tag_no',tagNo).maybeSingle();
+  if(error||!data)return showToast('Không tìm thấy tem '+tagNo+' trong MES',true);
+  if(state.current && data.ma_sp!==state.current.ma_sp)return showToast('Tem '+tagNo+' không thuộc mã SP đang kiểm ('+state.current.ma_sp+')',true);
+  state.scannedTag=data;
+  document.getElementById('ck-tag-info').textContent='✓ '+data.tag_no+' — LOT '+(data.lot||'—')+' — '+Number(data.so_luong||0).toLocaleString('vi-VN')+' pcs';
+}
+document.getElementById('ck-qr-scanner').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();const x=e.target.value;e.target.value='';acceptQr(x)}});
+let ckQrScanner=null;
+async function openQrCamera(){if(typeof Html5Qrcode!=='function')return showToast('Chưa tải được thư viện QR',true);document.getElementById('ck-qr-modal').style.display='block';ckQrScanner=ckQrScanner||new Html5Qrcode('ck-qr-reader');try{await ckQrScanner.start({facingMode:'environment'},{fps:10,qrbox:{width:260,height:260}},async text=>{await closeQrCamera();acceptQr(text)},()=>{})}catch(e){closeQrCamera();showToast('Không mở được camera: '+e,true)}}
+async function closeQrCamera(){document.getElementById('ck-qr-modal').style.display='none';if(ckQrScanner&&ckQrScanner.isScanning)try{await ckQrScanner.stop()}catch(e){}}
+async function decodeQrFromEvidence(){
+  if(!state.photos.length)return showToast('Hãy chọn/chụp ảnh có QR trước',true);
+  if(typeof jsQR!=='function')return showToast('Chưa tải được thư viện đọc QR ảnh',true);
+  for(const p of state.photos){const img=new Image();img.src=p.dataUrl;await img.decode();const c=document.getElementById('ck-qr-canvas'),x=c.getContext('2d');c.width=img.width;c.height=img.height;x.drawImage(img,0,0);const d=x.getImageData(0,0,c.width,c.height),code=jsQR(d.data,d.width,d.height);if(code&&code.data)return acceptQr(code.data)}
+  showToast('Không tìm thấy QR trong các ảnh đã chọn',true);
 }
 
 function startCheckTimer(){
@@ -819,12 +858,14 @@ async function uploadEvidencePhotos(maMay, maSp, ketQua){
   const safeMay = String(maMay||'').replace(/[^a-zA-Z0-9_-]/g,'');
   const safeSp = String(maSp||'').replace(/[^a-zA-Z0-9_-]/g,'');
   const safeCheckpoint = String((state.current && state.current.id_checkpoint) || '').replace(/[^a-zA-Z0-9_-]/g,'');
+  const safeLot = String((state.scannedTag && state.scannedTag.lot) || 'NOLOT').replace(/[^a-zA-Z0-9_-]/g,'');
+  const safeTag = String((state.scannedTag && state.scannedTag.tag_no) || 'NOTAG').replace(/[^a-zA-Z0-9_-]/g,'');
   const uniq = now.getTime().toString(36);
   const urls = [];
   for (let i = 0; i < state.photos.length; i++) {
     const p = state.photos[i];
     const idxPart = state.photos.length > 1 ? ('_' + (i+1)) : '';
-    const path = dateFolder + '/' + stamp + '_' + safeMay + '_' + safeSp + '_' + ketQua + '_' + safeCheckpoint + '_' + uniq + idxPart + '.jpg';
+    const path = dateFolder + '/' + safeMay + '/' + safeSp + '/' + safeLot + '/' + safeCheckpoint + '/' + safeTag + '_' + ketQua + '_' + uniq + idxPart + '.jpg';
     const { error } = await sb.storage.from('ipqc-evidence').upload(path, p.blob, { contentType: p.mime, upsert: false });
     if (error) throw new Error('Lỗi tải ảnh lên: ' + error.message);
     const { data } = sb.storage.from('ipqc-evidence').getPublicUrl(path);
@@ -843,6 +884,8 @@ async function submitCheck(ketQua){
     return;
   }
   const nguoiKiem = await getNguoiKiemIdentity() || session.user.email;
+
+  if (ketQua === 'NG' && !state.scannedTag) return showToast('Kết luận NG bắt buộc quét/chọn đúng LOT hoặc Tem để khóa', true);
 
   if (!state.photos.length) return showToast('Vui lòng chụp ít nhất 1 ảnh bằng chứng trước khi lưu', true);
 
@@ -880,7 +923,8 @@ async function submitCheck(ketQua){
 
     showOverlay('Đang lưu kết quả...');
     const thoiGianKiemGiay = state.checkStartedAt ? Math.round((Date.now() - state.checkStartedAt) / 1000) : null;
-    const { data, error } = await sb.rpc('duc_submit_ipqc_check', {
+    const rpcName = ketQua === 'NG' ? 'duc_submit_ipqc_check_and_hold' : 'duc_submit_ipqc_check';
+    const rpcPayload = {
       p_id_checkpoint: state.current.id_checkpoint,
       p_checklist: state.checklistAnswers,
       p_ket_qua: ketQua,
@@ -888,7 +932,9 @@ async function submitCheck(ketQua){
       p_ghi_chu: ghiChu,
       p_thoi_gian_kiem_giay: thoiGianKiemGiay,
       p_nguoi_kiem: nguoiKiem,
-    });
+    };
+    if(ketQua==='NG') rpcPayload.p_tag_no=state.scannedTag.tag_no;
+    const { data, error } = await sb.rpc(rpcName, rpcPayload);
     hideOverlay();
     if (error) return onError(new Error(error.message));
     if (data && data.ok === false) return onError(new Error(data.error));
