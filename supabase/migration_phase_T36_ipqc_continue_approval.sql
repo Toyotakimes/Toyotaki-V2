@@ -70,9 +70,11 @@ alter table public.duc_ipqc_continue_approval enable row level security;
 alter table public.duc_ipqc_continue_audit enable row level security;
 alter table public.duc_ipqc_continue_notification enable row level security;
 drop policy if exists "authenticated manage continue request" on public.duc_ipqc_continue_request;
-create policy "authenticated manage continue request" on public.duc_ipqc_continue_request for all to authenticated using(true) with check(true);
+drop policy if exists "authenticated read continue request" on public.duc_ipqc_continue_request;
+create policy "authenticated read continue request" on public.duc_ipqc_continue_request for select to authenticated using(true);
 drop policy if exists "authenticated manage continue approval" on public.duc_ipqc_continue_approval;
-create policy "authenticated manage continue approval" on public.duc_ipqc_continue_approval for all to authenticated using(true) with check(true);
+drop policy if exists "authenticated read continue approval" on public.duc_ipqc_continue_approval;
+create policy "authenticated read continue approval" on public.duc_ipqc_continue_approval for select to authenticated using(true);
 drop policy if exists "authenticated read continue audit" on public.duc_ipqc_continue_audit;
 create policy "authenticated read continue audit" on public.duc_ipqc_continue_audit for select to authenticated using(true);
 drop policy if exists "authenticated read continue notification" on public.duc_ipqc_continue_notification;
@@ -80,12 +82,19 @@ create policy "authenticated read continue notification" on public.duc_ipqc_cont
 
 -- Không cấp UPDATE/DELETE audit: lịch sử chỉ được ghi qua các RPC security definer.
 revoke insert,update,delete on public.duc_ipqc_continue_audit from anon,authenticated;
+revoke insert,update,delete on public.duc_ipqc_continue_request from anon,authenticated;
+revoke insert,update,delete on public.duc_ipqc_continue_approval from anon,authenticated;
+revoke insert,update,delete on public.duc_ipqc_continue_notification from anon,authenticated;
 
 create or replace function public.duc_ipqc_create_continue_request(p_data jsonb, p_actor text)
 returns bigint language plpgsql security definer set search_path=public as $$
-declare v_id bigint; v_step record;
+declare v_id bigint; v_step record; v_existing bigint;
 begin
   if auth.uid() is null then raise exception 'Cần đăng nhập MES'; end if;
+  if nullif(p_data->>'checkpoint_id','') is not null then
+    select id into v_existing from duc_ipqc_continue_request where checkpoint_id=p_data->>'checkpoint_id' and status in('Chờ duyệt','Đang duyệt','Đã duyệt','Đang có hiệu lực') order by created_at desc limit 1;
+    if v_existing is not null then raise exception 'Lần kiểm IPQC này đã có yêu cầu đang xử lý'; end if;
+  end if;
   insert into duc_ipqc_continue_request(checkpoint_id,machine,process,product_code,lot_no,warning_content,actual_value,standard_min,standard_max,warning_level,reason_type,reason_detail,allowed_until,allowed_hours,allowed_qty,produced_at_request,repair_department,treatment_content,treatment_deadline,requester_name)
   values(nullif(p_data->>'checkpoint_id',''),p_data->>'machine',p_data->>'process',p_data->>'product_code',p_data->>'lot_no',p_data->>'warning_content',p_data->>'actual_value',p_data->>'standard_min',p_data->>'standard_max',coalesce(p_data->>'warning_level','NG'),p_data->>'reason_type',p_data->>'reason_detail',nullif(p_data->>'allowed_until','')::timestamptz,nullif(p_data->>'allowed_hours','')::numeric,nullif(p_data->>'allowed_qty','')::numeric,coalesce(nullif(p_data->>'produced_current','')::numeric,0),p_data->>'repair_department',p_data->>'treatment_content',nullif(p_data->>'treatment_deadline','')::timestamptz,p_actor) returning id into v_id;
   for v_step in select * from (values (1,'QL Chất lượng'),(2,'KHSX'),(3,'QL Đúc/Bộ phận sản xuất'),(4,'GĐ Sản xuất')) s(n,l) loop

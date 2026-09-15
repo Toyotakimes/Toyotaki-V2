@@ -851,7 +851,7 @@ function doneRowHtml(d){
       ${scBadge}
       ${d.id_van_de_lien_quan ? '<span class="pill neutral" title="Đã tạo bản ghi vấn đề khuôn ' + escapeHtml(d.id_van_de_lien_quan) + '">Đã báo khuôn</span>' : ''}
       ${ipqcNote}
-      ${d.ket_qua !== 'OK' ? '<a class="link-btn" href="ipqc-approval.html?machine='+encodeURIComponent(d.ma_may)+'&productCode='+encodeURIComponent(d.ma_sp)+'&warningLevel='+(d.ket_qua==='NG'?'NG':'EARLY_WARNING')+'&warningContent='+encodeURIComponent(ipqcNoteParts.join(' — '))+'">Yêu cầu tiếp tục chạy</a>' : ''}
+      ${d.ket_qua !== 'OK' ? '<a class="link-btn" href="ipqc-approval.html?checkpointId='+encodeURIComponent(d.id_checkpoint)+'&machine='+encodeURIComponent(d.ma_may)+'&productCode='+encodeURIComponent(d.ma_sp)+'&warningLevel='+(d.ket_qua==='NG'?'NG':'EARLY_WARNING')+'&warningContent='+encodeURIComponent(ipqcNoteParts.join(' — '))+'">Yêu cầu tiếp tục chạy</a>' : ''}
       ${(!d.anh_bang_chung_urls || !d.anh_bang_chung_urls.length) && !d.id_van_de_lien_quan && !scBadge && !ipqcNote ? '—' : ''}
     </td>
   </tr>`;
