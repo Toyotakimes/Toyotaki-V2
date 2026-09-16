@@ -126,6 +126,9 @@ header .sub{font-size:12px;color:#94A3B8;font-family:'JetBrains Mono',monospace}
 .cach-ly-row .tag{font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--alarm-fg)}
 .cach-ly-row.da_giai_toa .tag{color:var(--text-muted)}
 .cach-ly-row .meta{font-size:11px;color:var(--text-muted)}
+.cach-ly-row .detail{font-size:11px;color:var(--text);margin-top:3px;line-height:1.45}
+.hold-badge{display:inline-block;margin-left:7px;padding:2px 7px;border-radius:999px;background:#B91C1C;color:#fff;font-size:10px;font-weight:800;letter-spacing:.04em}
+.cach-ly-row.da_giai_toa .hold-badge{background:#64748B}
 .cach-ly-empty{font-size:12px;color:var(--text-dim);padding:6px 0}
 </style>
 </head>
@@ -585,18 +588,28 @@ function renderCachLyList(){
     const meta = dangCachLy
       ? 'Cách ly bởi ' + escapeHtml(r.nguoi_cach_ly || '?') + ' lúc ' + new Date(r.thoi_diem_cach_ly).toLocaleString('vi-VN', { hour12: false })
       : 'Đã giải toả bởi ' + escapeHtml(r.nguoi_giai_toa || '?') + ' lúc ' + new Date(r.thoi_diem_giai_toa).toLocaleString('vi-VN', { hour12: false });
+    const detail = [
+      r.ma_sp ? 'SP: ' + escapeHtml(r.ma_sp) + (r.ten_sp ? ' — ' + escapeHtml(r.ten_sp) : '') : '',
+      r.cong_doan_hien_tai ? 'Công đoạn: ' + escapeHtml(r.cong_doan_hien_tai) : '',
+      r.ly_do_cach_ly ? 'Lý do HOLD: ' + escapeHtml(r.ly_do_cach_ly) : '',
+      !dangCachLy && r.ly_do_giai_toa ? 'Lý do Release: ' + escapeHtml(r.ly_do_giai_toa) : ''
+    ].filter(Boolean).join('<br>');
+    const canRelease = dangCachLy && state.case.rc_trang_thai_duyet === 'da_duyet';
     return `<div class="cach-ly-row ${dangCachLy ? '' : 'da_giai_toa'}">
-      <div><span class="tag">${escapeHtml(r.tag_no)}</span><div class="meta">${meta}</div></div>
-      ${dangCachLy ? `<button type="button" class="btn btn-outline" onclick="giaiToaTem('${r.tag_no.replace(/'/g, "\\'")}')">🔓 Giải toả</button>` : ''}
+      <div><span class="tag">${escapeHtml(r.tag_no)}</span><span class="hold-badge">${dangCachLy ? 'HOLD / QUARANTINE' : 'RELEASED'}</span><div class="detail">${detail}</div><div class="meta">${meta}</div></div>
+      ${canRelease ? `<button type="button" class="btn btn-outline" onclick="giaiToaTem('${r.tag_no.replace(/'/g, "\\'")}')">🔓 Giải phóng cách ly</button>` : (dangCachLy ? '<span class="meta">Chờ duyệt đối sách để Release</span>' : '')}
     </div>`;
   }).join('');
 }
 
 async function giaiToaTem(tagNo){
   if (!(await ensureAuth())) return;
-  if (!confirm('Giải toả cách ly cho tem ' + tagNo + '?')) return;
+  if (state.case.rc_trang_thai_duyet !== 'da_duyet') return alert('Chỉ được Release sau khi đối sách NCP đã được phê duyệt.');
+  const lyDo = prompt('Nhập lý do giải phóng cách ly cho tem ' + tagNo + ':', 'Đã hoàn thành xử lý theo đối sách được duyệt');
+  if (lyDo === null) return;
+  if (!lyDo.trim()) return alert('Bắt buộc nhập lý do Release.');
   showOverlay('Đang giải toả...');
-  const { data, error } = await sb.rpc('duc_ncp_giai_toa_tem', { p_id_ncp: state.id, p_tag_no: tagNo, p_user: state.currentUserEmail });
+  const { data, error } = await sb.rpc('duc_ncp_giai_toa_tem_v2', { p_id_ncp: state.id, p_tag_no: tagNo, p_user: state.currentUserEmail, p_ly_do: lyDo.trim() });
   hideOverlay();
   if (error) return alert('Lỗi: ' + error.message);
   if (data && data.ok === false) return alert('Lỗi: ' + data.error);
