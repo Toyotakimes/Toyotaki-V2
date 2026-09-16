@@ -1,0 +1,17 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "mes-toyotaki",
+  "account_id": "8f888124185023ee553ef0d51c935f62",
+  "compatibility_date": "2026-09-15",
+  "workers_dev": true,
+  "assets": {
+    "directory": "./.deploy/site"
+  },
+  "build": {
+    "command": "node scripts/build-static.mjs"
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}
